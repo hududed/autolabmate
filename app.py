@@ -17,8 +17,24 @@ def generate():
         param_names.append(param_name)
         param_ranges.append((min_val, max_val))
 
-    # Ask the user to enter the name of the objective
-    final_col_name = st.text_input('Name of the objective:', 'output')
+    # Initialize the data_header variable with default values
+    final_col_name1 = 'output1'
+    final_col_name2 = 'output2'
+    data_header = param_names + [final_col_name1, final_col_name2]
+
+    # Ask the user to select single or multiobjective optimization
+    optimization_type = st.selectbox('Select optimization type:', ['Single', 'Multi'])
+
+    # If single objective optimization is selected, ask the user to enter the name of the objective
+    if optimization_type == 'Single':
+        final_col_name = st.text_input('Name of the objective:', 'output')
+        data_header = param_names + [final_col_name]
+
+    # If multiobjective optimization is selected, ask the user to enter the names of the objectives
+    if optimization_type == 'Multi':
+        final_col_name1 = st.text_input('Name of the first objective:', 'output1')
+        final_col_name2 = st.text_input('Name of the second objective:', 'output2')
+        data_header = param_names + [final_col_name1, final_col_name2]
 
     # Generate the parameter values
     param_values = []
@@ -31,7 +47,6 @@ def generate():
         param_values.append(values)
 
     # Write the parameter values to a CSV file
-    data_header = param_names + [final_col_name]
     with open('dataset.csv', 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(data_header)
