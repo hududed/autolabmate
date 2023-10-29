@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "autolabmate"
+version = "0.1.0"
+description = "Web app for Bayesian optimization aimed at researchers with expertise in disciplines other than statistics and computer science."
+authors = ["Hud Wahab <hudwahab@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.12"
+rpy2 = "^3.5.14"
+pandas = "^2.1.2"
+flask = "^3.0.0"
+
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.26.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
