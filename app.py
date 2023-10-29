@@ -1,21 +1,20 @@
 import streamlit as st
 import csv
-from random import randrange
+from random import randrange, uniform
 import pandas as pd
 
 def generate():
     series = st.number_input('Number of parameters:', value=3)
     nr_random_lines = st.number_input('Number of random lines:', value=10)
 
-    # Ask the user to enter the parameter names and ranges
+    # Ask the user to enter the parameter names and types
     param_names = []
-    param_ranges = []
+    param_types = []
     for i in range(series):
         param_name = st.text_input(f'Parameter {i+1} name:', f'param{i+1}')
-        min_val = st.number_input(f'Minimum value for {param_name}:', value=0)
-        max_val = st.number_input(f'Maximum value for {param_name}:', value=100)
+        param_type = st.selectbox(f'Parameter {i+1} type:', ['Integer', 'Float', 'Categorical'])
         param_names.append(param_name)
-        param_ranges.append((min_val, max_val))
+        param_types.append(param_type)
 
     # Initialize the data_header variable with default values
     final_col_name1 = 'output1'
@@ -36,15 +35,41 @@ def generate():
         final_col_name2 = st.text_input('Name of the second objective:', 'output2')
         data_header = param_names + [final_col_name1, final_col_name2]
 
+    # Ask the user to enter the minimum and maximum values or categories for each parameter
+    param_ranges = []
+    for i in range(series):
+        if param_types[i] == 'Integer':
+            min_val = st.number_input(f'Minimum value for {param_names[i]}:', value=0)
+            max_val = st.number_input(f'Maximum value for {param_names[i]}:', value=100)
+            param_ranges.append((min_val, max_val))
+        elif param_types[i] == 'Float':
+            min_val = st.number_input(f'Minimum value for {param_names[i]}:', value=0.0)
+            max_val = st.number_input(f'Maximum value for {param_names[i]}:', value=100.0)
+            param_ranges.append((min_val, max_val))
+        else:
+            categories = st.text_input(f'Enter categories for {param_names[i]} (comma-separated):', 'cat1,cat2,cat3')
+            categories = [cat.strip() for cat in categories.split(',')]
+            param_ranges.append(categories)
+
     # Generate the parameter values
     param_values = []
-    for i in range(nr_random_lines):
-        values = []
-        for j in range(series):
-            min_val, max_val = param_ranges[j]
-            value = randrange(min_val, max_val+1, 1)
-            values.append(value)
-        param_values.append(values)
+    try:
+        for i in range(nr_random_lines):
+            values = []
+            for j in range(series):
+                if param_types[j] == 'Integer':
+                    min_val, max_val = param_ranges[j]
+                    value = randrange(min_val, max_val+1, 1)
+                elif param_types[j] == 'Float':
+                    min_val, max_val = param_ranges[j]
+                    value = format(round(uniform(min_val, max_val), 2), '.2f')
+                else:
+                    categories = param_ranges[j]
+                    value = categories[randrange(len(categories))]
+                values.append(value)
+            param_values.append(values)
+    except Exception as e:
+        st.error(f'Error generating parameter values: {e}')
 
     # Write the parameter values to a CSV file
     with open('dataset.csv', 'w', newline='') as f:
