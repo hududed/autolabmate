@@ -77,13 +77,12 @@ class CSVGenerator:
             st.error(f'Error generating parameter values: {e}')
 
     def write_csv_file(self) -> None:
-        with open('dataset.csv', 'w', newline='') as f:
+        with open('data.csv', 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(self.data_header)
             for values in self.param_values:
                 writer.writerow(values)
-        df2 = pd.read_csv('dataset.csv')
-        df2 = df2.drop_duplicates() #keep only the unique rows
+        df2 = pd.read_csv('data.csv')
         df2.to_csv('data.csv', index=False) #this is what will be read by mlrMBO in the R code
 
     def download_csv_file(self) -> None:
