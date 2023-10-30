@@ -38,7 +38,7 @@ def upload_to_bucket(bucket_name, file_name, file_content):
     st.write(f'Uploading file "{file_name}" to bucket "{bucket_name}" as "{new_file_name}"')
     # Upload file to bucket
     supabase_client.storage.from_(bucket_name).upload(new_file_name, file_content)
-    st.write(f'File "{new_file_name}" uploaded to bucket "{bucket_name}"')
+    st.write(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
 
 def create_table(table_name):
     # Create new table
@@ -52,7 +52,7 @@ def insert_data(table_name, data):
     with engine.connect() as conn:
         df = pd.read_csv(data)
         df.to_sql(table_name, conn, if_exists='replace', index=False)
-        st.write(f'Data {data.name} inserted into table "{table_name}"')
+        st.write(f'{data.name} inserted into table "{table_name}"')
 
 def display_table(table_name):
     # Display table
