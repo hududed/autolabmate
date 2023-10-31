@@ -1,7 +1,11 @@
 import streamlit as st
+import altair as alt
 import supabase
 import psycopg2
 from sqlalchemy import create_engine, text, inspect
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import pandas as pd
 import uuid
 import os
@@ -63,8 +67,24 @@ def display_table(table_name):
     # Highlight the maximum values in the last column
     df_styled = df.style.highlight_max(subset=[df.columns[-1]])
 
-    # Display the DataFrame
-    st.dataframe(df_styled)
+    # Create two columns
+    col1, col2 = st.columns(2)
+
+    # Display the DataFrame in the left column
+    col1.dataframe(df_styled)
+
+    # Plot output as a function of each parameter in the right column
+    output = df.iloc[:, -1]
+    for param in df.columns[:-1]:
+        chart_data = pd.DataFrame({
+            'x': df[param],
+            'y': output
+        })
+        chart = alt.Chart(chart_data).mark_circle().encode(
+            x=alt.X('x', title=param),
+            y=alt.Y('y', title=output.name)
+        )
+        col2.altair_chart(chart)
 
 
 def main():
