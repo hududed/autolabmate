@@ -6,6 +6,7 @@ from sqlalchemy import create_engine, text, inspect
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import seaborn as sns
 import pandas as pd
 import uuid
 import os
@@ -70,10 +71,10 @@ def display_table(table_name):
     # Create two columns
     col1, col2 = st.columns(2)
 
-    # Display the DataFrame in the left column
+    # Display the DataFrame in the first column
     col1.dataframe(df_styled)
 
-    # Plot output as a function of each parameter in the right column
+    # Plot output as a function of each parameter in the second column
     output = df.iloc[:, -1]
     for param in df.columns[:-1]:
         chart_data = pd.DataFrame({
@@ -85,6 +86,9 @@ def display_table(table_name):
             y=alt.Y('y', title=output.name)
         )
         col2.altair_chart(chart)
+    sns.set_theme(context='talk')
+    pairplot_fig = sns.pairplot(df, hue="param3", diag_kind='kde')
+    st.pyplot(pairplot_fig)
 
 
 def main():
