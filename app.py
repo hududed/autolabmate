@@ -1,7 +1,7 @@
 import streamlit as st
 import supabase
 import psycopg2
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, inspect
 import pandas as pd
 import uuid
 import os
@@ -55,33 +55,56 @@ def insert_data(table_name, data):
         st.write(f'{data.name} inserted into table "{table_name}"')
 
 def display_table(table_name):
-    # Display table
+    # Query the table
     with engine.connect() as conn:
-        query = text(f'SELECT * FROM {table_name};')
+        query = f'SELECT * FROM {table_name}'
         df = pd.read_sql(query, conn)
-        st.write(df)
+
+    # Highlight the maximum values in the last column
+    df_styled = df.style.highlight_max(subset=[df.columns[-1]])
+
+    # Display the DataFrame
+    st.dataframe(df_styled)
 
 
 def main():
     st.set_page_config(page_title='Web App', page_icon=':chart_with_upwards_trend:')
     st.title('Web App')
+
     # Check if user is logged in
     session = supabase_client.auth.get_session()
     if session and session.user:
         # User is logged in
-        st.write('Please upload a CSV file to create a new table.')
-        file = st.file_uploader('Upload CSV', type='csv')
-        if file is not None:
-            st.write('Please enter a name for the new table.')
-            with st.form(key='create_table_form'):
-                table_name = st.text_input('Table Name')
-                if st.form_submit_button('Create Table') and table_name != '':
-                    create_table(table_name)
-                    insert_data(table_name, file)
-                    st.write('Redirecting to new page...')
+
+        # Define pages
+        pages = ['Upload CSV', 'Display Table']
+
+        # Add buttons to the sidebar for page navigation
+        for page in pages:
+            if st.sidebar.button(page):
+                st.session_state.selected_page = page
+
+        if 'selected_page' in st.session_state:
+            if st.session_state.selected_page == 'Upload CSV':
+                st.write('Please upload a CSV file to create a new table.')
+                file = st.file_uploader('Upload CSV', type='csv')
+                if file is not None:
+                    st.write('Please enter a name for the new table.')
+                    with st.form(key='create_table_form'):
+                        table_name = st.text_input('Table Name')
+                        if st.form_submit_button('Create Table') and table_name != '':
+                            create_table(table_name)
+                            insert_data(table_name, file)
+                            st.write('You can now view the table in the `Display Table` tab.')
+                            # st.rerun()
+            elif st.session_state.selected_page == 'Display Table':
+                inspector = inspect(engine)
+                table_names = inspector.get_table_names()
+                if table_names:
+                    table_name = st.selectbox('Select a table to display', table_names)
                     display_table(table_name)
-                    # st.rerun()
-                    
+                else:
+                    st.write('No tables found in the database.')
     else:
         # User is not logged in
         st.write('Please login or create a new account to get started.')
