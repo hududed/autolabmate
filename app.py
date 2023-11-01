@@ -1,27 +1,12 @@
 import streamlit as st
 import altair as alt
-import supabase
-import psycopg2
-from sqlalchemy import create_engine, text, inspect
+from sqlalchemy import text, inspect
+from components.authenticate import engine, supabase_client
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import uuid
-import os
-from dotenv import load_dotenv
-load_dotenv()
-
-# Load Supabase credentials from .env file
-supabase_url = os.getenv('SUPABASE_URL')
-supabase_key = os.getenv('SUPABASE_KEY')
-
-# Initialize Supabase client
-supabase_client = supabase.create_client(supabase_url, supabase_key)
-PG_PASS = os.getenv('PG_PASS')
-DATABASE_URL = f'postgresql://postgres:{PG_PASS}@db.zugnayzgayyoveqcmtcd.supabase.co:5432/postgres'
-engine = create_engine(DATABASE_URL)
 
 # Define routes
 def create_account(email, password):
@@ -90,6 +75,26 @@ def display_table(table_name):
     pairplot_fig = sns.pairplot(df, hue="param3", diag_kind='kde')
     st.pyplot(pairplot_fig)
 
+def upload_csv_page():
+    st.write('Please upload a CSV file to create a new table.')
+    file = st.file_uploader('Upload CSV', type='csv')
+    if file is not None:
+        st.write('Please enter a name for the new table.')
+        with st.form(key='create_table_form'):
+            table_name = st.text_input('Table Name')
+            if st.form_submit_button('Create Table') and table_name != '':
+                create_table(table_name)
+                insert_data(table_name, file)
+                st.write('You can now view the table in the `Display Table` tab.')
+
+def display_table_page():
+    inspector = inspect(engine)
+    table_names = inspector.get_table_names()
+    if table_names:
+        table_name = st.selectbox('Select a table to display', table_names)
+        display_table(table_name)
+    else:
+        st.write('No tables found in the database.')
 
 def main():
     st.set_page_config(page_title='Web App', page_icon=':chart_with_upwards_trend:')
@@ -107,28 +112,18 @@ def main():
         for page in pages:
             if st.sidebar.button(page):
                 st.session_state.selected_page = page
+        
+        # Add logout button to the sidebar
+        if st.sidebar.button('Logout'):
+            supabase_client.auth.sign_out()
+            st.session_state.clear()  # Clear the session state
+            st.rerun()  # Rerun the script to update the UI
 
         if 'selected_page' in st.session_state:
             if st.session_state.selected_page == 'Upload CSV':
-                st.write('Please upload a CSV file to create a new table.')
-                file = st.file_uploader('Upload CSV', type='csv')
-                if file is not None:
-                    st.write('Please enter a name for the new table.')
-                    with st.form(key='create_table_form'):
-                        table_name = st.text_input('Table Name')
-                        if st.form_submit_button('Create Table') and table_name != '':
-                            create_table(table_name)
-                            insert_data(table_name, file)
-                            st.write('You can now view the table in the `Display Table` tab.')
-                            # st.rerun()
+                upload_csv_page()
             elif st.session_state.selected_page == 'Display Table':
-                inspector = inspect(engine)
-                table_names = inspector.get_table_names()
-                if table_names:
-                    table_name = st.selectbox('Select a table to display', table_names)
-                    display_table(table_name)
-                else:
-                    st.write('No tables found in the database.')
+                display_table_page()
     else:
         # User is not logged in
         st.write('Please login or create a new account to get started.')
@@ -137,7 +132,9 @@ def main():
         if st.button('Login'):
             response = login(credentials={'email': email, 'password': password})
             # Ignore any errors for now
-            st.write('Login successful!')
+            import pprint
+            pprint.pprint(response)
+            st.write(f'Login successful!')
             # Store login state in SessionState object
             st.session_state.logged_in = True
             # Redirect to new page

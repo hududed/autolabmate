@@ -20,6 +20,8 @@ python-multipart = "^0.0.6"
 gotrue = "^1.2.0"
 psycopg2-binary = "^2.9.9"
 sqlalchemy = "^2.0.22"
+matplotlib = "^3.8.0"
+seaborn = "^0.13.0"
 
 
 [tool.poetry.group.dev.dependencies]
