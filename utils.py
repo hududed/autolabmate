@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import altair as alt
+from typing import Dict, Any
 
 
 load_dotenv()
@@ -116,6 +117,13 @@ def get_user_inputs(table, table_name):
 
     # Get parameter info
     parameter_info = table.dtypes[: -len(output_column_names)].to_dict()
+    # Define a mapping from pandas dtypes to your desired types
+    dtype_mapping = {"int64": "integer", "float64": "float", "O": "category"}
+
+    # Iterate over the items in the dictionary and replace the dtypes
+    parameter_info = {
+        k: dtype_mapping.get(v.name, v.name) for k, v in parameter_info.items()
+    }
 
     # Get parameter ranges
     parameter_ranges = {}
@@ -177,7 +185,7 @@ def display_dictionary(
     num_random_lines,
     parameter_info,
     parameter_ranges,
-):
+) -> Dict[str, Any]:
     metadata = {
         "table_name": table_name,
         "optimization_type": optimization_type,
@@ -189,5 +197,7 @@ def display_dictionary(
         "parameter_ranges": parameter_ranges,
         "learner": "regr.ranger",
         "acquisition_function": "ei",
+        "direction": "minimize",
     }
     st.write(metadata)
+    return metadata
