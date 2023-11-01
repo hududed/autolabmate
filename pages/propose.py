@@ -48,18 +48,44 @@ def main():
                 categories = st.text_input(f'Enter the categories for {column}', value=', '.join(table[column].unique()))
                 parameter_ranges[column] = categories.split(', ')
 
-        # Generate the dictionary metadata
-        metadata = {
-            'table_name': table_name,
-            'optimization_type': optimization_type,
-            'output_column_names': output_column_names,
-            'num_parameters': num_parameters,
-            'num_random_lines': num_random_lines,
-            'parameter_info': parameter_info,
-            'parameter_ranges': parameter_ranges,
-        }
 
-        st.write(metadata)
+        # Add validate button
+        if st.button('Validate'):
+            validation_errors = []
+
+            # Validate numeric parameters
+            for column, range_values in parameter_ranges.items():
+                if np.issubdtype(table[column].dtype, np.number):
+                    min_value, max_value = range_values
+                    if not min_value <= table[column].max() <= max_value:
+                        validation_errors.append(f'Values for {column} are not within the specified range.')
+
+            # Validate string parameters
+            for column, categories in parameter_ranges.items():
+                if np.issubdtype(table[column].dtype, object):
+                    unique_values = table[column].unique()
+                    if not set(unique_values).issubset(set(categories)):
+                        validation_errors.append(f'Unique values for {column} are not within the specified categories.')
+
+            # Display validation errors or metadata
+            if validation_errors:
+                for error in validation_errors:
+                    st.write(error)
+            else:
+                st.write('Validation passed.')
+                metadata = {
+                    'table_name': table_name,
+                    'optimization_type': optimization_type,
+                    'batch_type': 'batch',
+                    'output_column_names': output_column_names,
+                    'num_parameters': num_parameters,
+                    'num_random_lines': num_random_lines,
+                    'parameter_info': parameter_info,
+                    'parameter_ranges': parameter_ranges,
+                    'learner': 'regr.ranger',
+                    'acquisition_function': 'ei',
+                }
+                st.write(metadata)
 
 if __name__ == "__main__":
     main()
