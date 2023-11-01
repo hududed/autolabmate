@@ -2,7 +2,6 @@ import streamlit as st
 from utils import create_table, insert_data
 from st_pages import hide_pages
 
-# hide_pages(["home"])
 
 st.title("Upload CSV")
 
