@@ -14,7 +14,7 @@ def drop_column_from_table(table_name, column_name):
         # Drop the column
         with engine.connect() as connection:
             db_table._columns.remove(db_table.c[column_name])
-        st.write(f"Dropped column {column_name} from database table {table_name}")
+        st.write(f"Dropped column {column_name} from table {table_name}")
     else:
         st.write(f'Column "{column_name}" does not exist in table "{table_name}"')
 
@@ -47,10 +47,17 @@ def main():
         st.dataframe(st.session_state.table)
 
         # Validate button
-        if st.button('Validate'):
+        if st.button('Update Database Table'):
+            # Display a warning message
+            st.warning('Warning: The changes you are about to make are permanent.')
+            st.session_state.update_clicked = True
+
+        if 'update_clicked' in st.session_state and st.session_state.update_clicked and st.button('Confirm'):
             # Replace the table in the database with the new table
             st.session_state.table.to_sql(table_name, engine, if_exists='replace', index=False)
             st.write(f"Table {table_name} has been updated.")
+            st.session_state.update_clicked = False
+
 
 if __name__ == '__main__':
     main()
