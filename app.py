@@ -32,6 +32,7 @@ def login():
             show_pages(
                 [
                     Page("pages/upload.py", "upload", icon="⬆️"),
+                    Page("pages/clean.py", "clean", icon="🧹"),
                     Page("pages/dashboard.py", "dashboard", icon="📈"),
                     Page("pages/propose.py", "propose", icon="🤖")
                 ]

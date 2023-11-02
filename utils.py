@@ -1,7 +1,7 @@
 import streamlit as st
 import supabase
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text, inspect
+from sqlalchemy import create_engine, text, inspect, MetaData, Table
 import os
 import uuid
 import pandas as pd
@@ -66,6 +66,19 @@ def insert_data(table_name, data):
         df.to_sql(table_name, conn, if_exists="replace", index=False)
         st.write(f'{data.name} inserted into table "{table_name}"')
 
+def drop_column_from_table(table_name, column_name):
+    # Reflect the table
+    metadata = MetaData()
+    db_table = Table(table_name, metadata, autoload_with=engine)
+
+    # Check if the column exists
+    if column_name in db_table.c:
+        # Drop the column
+        with engine.connect() as connection:
+            db_table.c[column_name].drop(db_table)
+        st.write(f"Dropped column {column_name} from database table {table_name}")
+    else:
+        st.write(f'Column "{column_name}" does not exist in table "{table_name}"')
 
 def display_table(table_name):
     # Query the table
@@ -93,7 +106,8 @@ def display_table(table_name):
         )
         col2.altair_chart(chart)
     sns.set_theme(context="talk")
-    pairplot_fig = sns.pairplot(df, hue="param3", diag_kind="kde")
+    # TODO: hue parameter must be user input
+    pairplot_fig = sns.pairplot(df, diag_kind="kde")
     st.pyplot(pairplot_fig)
 
 
@@ -110,10 +124,20 @@ def get_user_inputs(table, table_name):
     # Get number of parameters
     num_parameters = len(table.columns) - len(output_column_names)
 
-    # Get number of random lines
-    num_random_lines = st.number_input(
-        "Enter the number of random lines", min_value=1, max_value=len(table)
-    )
+    drop_column = st.selectbox("Select a column to drop from database", ["None"] + list(table.columns))
+    if drop_column != "None":
+        # Drop the column from the dataframe
+        table = table.drop(columns=[drop_column])
+        st.write(f"Dropped column: {drop_column}")
+
+        # Drop the column from the database table
+        drop_column_from_table(table_name, drop_column)
+
+
+        # Get number of random lines
+        num_random_lines = st.number_input(
+            "Enter the number of random lines", min_value=1, max_value=len(table)
+        )
 
     # Get parameter info
     parameter_info = table.dtypes[: -len(output_column_names)].to_dict()
