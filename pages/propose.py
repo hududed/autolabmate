@@ -7,7 +7,7 @@ from utils import (
     display_dictionary,
 )
 import pandas as pd
-import rpy2.robjects as robjects
+import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 from rpy2.robjects.conversion import localconverter
 from rpy2.robjects.vectors import ListVector, StrVector
@@ -55,7 +55,7 @@ def main():
                 )
 
             # Define the mlr3 R functions
-            robjects.r(
+            ro.r(
                 """
             library(mlr3mbo)
             library(mlr3)
@@ -85,6 +85,7 @@ def main():
                 acq_function$surrogate$update()
                 acq_function$update()
                 candidate = acq_optimizer$optimize()
+                print(candidate)
                 tmp_archive = archive$clone(deep = TRUE)
                 acq_function$surrogate$archive = tmp_archive
                 lie[, archive$cols_y := liar(archive$data[[archive$cols_y]])]
@@ -102,9 +103,16 @@ def main():
                     acq_function$update()
                     candidate_new = acq_optimizer$optimize()
                     candidate = rbind(candidate, candidate_new)
+                    # print(candidate)
                 }
                 
-                candidate$param2 <- format(round(candidate$param2, 2), nsmall = 2)
+                # Iterate over each column in candidate
+                for (col in names(candidate)) {
+                    # If the column is numeric, round and format it
+                    if (is.double(candidate[[col]])) {
+                        candidate[[col]] <- format(round(candidate[[col]], 2), nsmall = 2)
+                    }
+                }
                 save_archive(tmp_archive, acq_function, acq_optimizer)
                 return(list(candidate, tmp_archive, acq_function))
             }
@@ -126,8 +134,8 @@ def main():
                     print(param_info)
                     print(param_range)
 
-                    # Check if param_info is 'category', if so, no need to convert to numeric
-                    if (param_info == 'category') {
+                    # Check if param_info is 'object', if so, no need to convert to numeric
+                    if (param_info == 'object') {
                         search_space$add(ParamFct$new(id = param_name, levels = param_range))
                         next
                     }
@@ -144,9 +152,6 @@ def main():
                         upper = as.numeric(param_range_split[2])
                     }
 
-                    print(typeof(lower))
-                    print(typeof(upper))
-
                     # Check if lower or upper is NA
                     if (is.na(lower) | is.na(upper)) {
                         print(paste("lower or upper is NA for param_name:", param_name))
@@ -155,7 +160,7 @@ def main():
 
                     # Add the parameter to the search space
                     if (param_info == 'float') {
-                        search_space$add(ParamDbl$new(id = param_name, lower = lower, upper = upper))
+                        search_space$add(ParamDbl$new(id = param_name, lower = lower, upper = upper)) # TODO: Trafo since levels are inf, but id doesnt work with p_int
                     } else if (param_info == 'integer') {
                         search_space$add(ParamInt$new(id = param_name, lower = lower, upper = upper))
                     }
@@ -168,8 +173,6 @@ def main():
                     # Add the output to the codomain
                     codomain$add(ParamDbl$new(id = output_name, tags = metadata$direction))
                 }
-                # print(search_space)
-                # print(codomain)
 
                 archive = Archive$new(search_space = search_space, codomain = codomain)
 
@@ -225,49 +228,48 @@ def main():
 
             print(result)
 
-            x2 <- candidate[, names(metadata$parameter_info)]
+            x2 <- candidate[, names(metadata$parameter_info), with=FALSE]
             print("New candidates: ")
             print(x2)
 
             x2_dt <- as.data.table(x2)
-            data <- rbind(data, x2_dt)
+            data <- rbindlist(list(data, x2_dt), fill = TRUE)
+            print(data)
             print("Returning data to streamlit")
+            return(data)
 
             }
             """
             )
-            # TODO: Candidate current output
-            # [[1]]
-            # param1 param2  x_domain    acq_ei .already_evaluated
-            # 1:     32  38.42 <list[2]> 0.1048288              FALSE
-            # param3 is missing, and candidate needs correction
 
-            # print(table)
             pandas2ri.activate()
-            # metadata = pd.DataFrame()
 
-            with localconverter(robjects.default_converter + pandas2ri.converter):
-                r_data = robjects.conversion.py2rpy(table)
-
-                def py_dict_to_r_list(py_dict):
-                    r_list = {}
-                    for k, v in py_dict.items():
-                        if isinstance(v, dict):
-                            r_list[k] = py_dict_to_r_list(v)
-                        elif isinstance(v, list):
-                            r_list[k] = StrVector(v)
-                        else:
-                            r_list[k] = StrVector([str(v)])
-                    return ListVector(r_list)
-
+            def py_dict_to_r_list(py_dict):
+                r_list = {}
+                for k, v in py_dict.items():
+                    if isinstance(v, dict):
+                        r_list[k] = py_dict_to_r_list(v)
+                    elif isinstance(v, list):
+                        r_list[k] = ro.StrVector(v)
+                    else:
+                        r_list[k] = ro.StrVector([str(v)])
+                return ro.ListVector(r_list)
+            converter = ro.default_converter + pandas2ri.converter
+            with converter.context():
+                r_data = ro.conversion.get_conversion().py2rpy(table)
                 r_metadata = py_dict_to_r_list(metadata)
-                print(r_metadata)
-                # print(r_param_names)
 
                 # Call the R function
-                rsum = robjects.r["experiment"]
-                with localconverter(robjects.default_converter + pandas2ri.converter):
-                    rsum(r_data, r_metadata, 1)
+                rsum = ro.r["experiment"]
+                result = rsum(r_data, r_metadata, 1)
+
+                # Convert R data frame to pandas data frame
+                df = ro.conversion.get_conversion().rpy2py(result)
+
+            print(df)
+            st.write(df)
+
+            # TODO: save rds to test-bucket/{table_name}
 
 
 if __name__ == "__main__":

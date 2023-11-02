@@ -118,7 +118,7 @@ def get_user_inputs(table, table_name):
     # Get parameter info
     parameter_info = table.dtypes[: -len(output_column_names)].to_dict()
     # Define a mapping from pandas dtypes to your desired types
-    dtype_mapping = {"int64": "integer", "float64": "float", "O": "category"}
+    dtype_mapping = {"int64": "integer", "float64": "float", "O": "object"}
 
     # Iterate over the items in the dictionary and replace the dtypes
     parameter_info = {
