@@ -1,15 +1,14 @@
 import streamlit as st
 import supabase
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text, inspect, MetaData, Table
+from sqlalchemy import create_engine, text
 import os
-import uuid
 import pandas as pd
 import numpy as np
 import seaborn as sns
 import altair as alt
 from typing import Dict, Any
-
+from pathlib import Path
 
 load_dotenv()
 # Load Supabase credentials from .env file
@@ -39,7 +38,6 @@ def login(credentials):
 
 
 def upload_to_bucket(bucket_name, table_name, file_name, file_content):
-    # Generate new UUID for file name
     new_file_name = table_name + "/" + file_name
     print(new_file_name)
     st.write(
@@ -48,6 +46,43 @@ def upload_to_bucket(bucket_name, table_name, file_name, file_content):
     # Upload file to bucket
     supabase_client.storage.from_(bucket_name).upload(new_file_name, file_content)
     st.write(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
+
+
+def upload_archive_to_bucket(bucket_name, table_name, file_path):
+    # Extract file name from file path
+    file_name = Path(file_path).name
+    new_file_name = f"{table_name}/{file_name}"
+
+    # Read file content
+    with open(file_path, "rb") as file:
+        file_content = file.read()
+
+    try:
+        # Upload file to bucket
+        supabase_client.storage.from_(bucket_name).upload(new_file_name, file_content)
+        print(new_file_name)
+        st.write(
+            f'Uploading file "{file_name}" to bucket "{bucket_name}" as "{new_file_name}"'
+        )
+        st.write(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
+    except Exception as e:
+        if "Duplicate" in str(e):
+            print(
+                f'File "{new_file_name}" already exists in bucket "{bucket_name}", skipping upload'
+            )
+        else:
+            raise e
+
+
+def save_and_upload_results(metadata):
+    # Define the base path
+    base_path = Path(metadata["bucket_name"], metadata["table_name"])
+
+    # Upload all .rds files in the base path
+    for file_path in base_path.glob("*.rds"):
+        upload_archive_to_bucket(
+            metadata["bucket_name"], metadata["table_name"], str(file_path)
+        )
 
 
 def create_table(table_name):
@@ -191,6 +226,7 @@ def display_dictionary(
     parameter_info,
     parameter_ranges,
     direction,
+    bucket_name: str = "test-bucket",
 ) -> Dict[str, Any]:
     metadata = {
         "table_name": table_name,
@@ -204,6 +240,7 @@ def display_dictionary(
         "learner": "regr.ranger",
         "acquisition_function": "ei",
         "direction": direction,
+        "bucket_name": bucket_name,
     }
     st.write(metadata)
     return metadata

@@ -5,9 +5,9 @@ from utils import (
     get_user_inputs,
     validate_inputs,
     display_dictionary,
+    save_and_upload_results,
 )
 import pandas as pd
-import numpy as np
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 
@@ -73,18 +73,40 @@ def main():
             library(tibble)
 
 
-            load_archive <- function() {
-                archive = readRDS("archive.rds") # load from test-bucket objects e.g. test-bucket/{table_name}/archive.rds
-                acq_function = readRDS("acqf.rds") # load from test-bucket objects e.g. test-bucket/{table_name}/acqf.rds
-                acq_optimizer = readRDS("acqopt.rds") # load from test-bucket objects e.g. test-bucket/{table_name}/acqopt.rds
+            load_archive <- function(table_name) {
+                # Get a list of all files in the bucket
+                files = list.files(path = paste0(metadata$bucket_name, "/", table_name), pattern = "*.rds", full.names = TRUE)
+                
+                # Filter for the latest archive, acqf, and acqopt files
+                archive_file = max(grep("archive", files, value = TRUE))
+                acqf_file = max(grep("acqf", files, value = TRUE))
+                acqopt_file = max(grep("acqopt", files, value = TRUE))
+                
+                # Load the files
+                archive = readRDS(archive_file)
+                acq_function = readRDS(acqf_file)
+                acq_optimizer = readRDS(acqopt_file)
+                
                 acq_function$surrogate$archive = archive
                 return(list(archive, acq_function, acq_optimizer))
             }
 
-            save_archive <- function(archive, acq_function, acq_optimizer) {
-                saveRDS(archive, "archive.rds") # save to test-bucket objects e.g. test-bucket/{table_name}/archive.rds
-                saveRDS(acq_function, "acqf.rds") # save to test-bucket objects e.g. test-bucket/{table_name}/acqf.rds
-                saveRDS(acq_optimizer, "acqopt.rds") # save to test-bucket objects e.g. test-bucket/{table_name}/acqopt.rds
+            save_archive <- function(archive, acq_function, acq_optimizer, metadata) {
+                # Get the current timestamp
+                timestamp = format(Sys.time(), "%Y%m%d%H%M%S")
+
+                # Define the directory path
+                dir_path = paste0(metadata$bucket_name, "/", metadata$table_name)
+                
+                # Create the directory if it doesn't exist
+                if (!dir.exists(dir_path)) {
+                    dir.create(dir_path, recursive = TRUE)
+                }
+                
+                # Save the objects to files
+                saveRDS(archive, paste0(metadata$bucket_name, "/", metadata$table_name, "/archive-", timestamp, ".rds"))
+                saveRDS(acq_function, paste0(metadata$bucket_name, "/", metadata$table_name, "/acqf-", timestamp, ".rds"))
+                saveRDS(acq_optimizer, paste0(metadata$bucket_name, "/", metadata$table_name, "/acqopt-", timestamp, ".rds"))
             }
 
             update_and_optimize <- function(acq_function, acq_optimizer, tmp_archive, candidate_new, lie) {
@@ -95,7 +117,7 @@ def main():
                 return(candidate_new)
             }
 
-            add_evals_to_archive <- function(archive, acq_function, acq_optimizer, data, q) {
+            add_evals_to_archive <- function(archive, acq_function, acq_optimizer, data, q, metadata) {
                 lie = data.table()
                 liar = min
                 acq_function$surrogate$update()
@@ -125,7 +147,7 @@ def main():
                     }
                 }
                 
-                save_archive(archive, acq_function, acq_optimizer)
+                save_archive(archive, acq_function, acq_optimizer, metadata)
                 return(list(candidate, archive, acq_function))
                 }
 
@@ -204,9 +226,9 @@ def main():
                 # print(acq_function)
                 # print(acq_optimizer)
                 # print(data)
-                result = add_evals_to_archive(archive, acq_function, acq_optimizer, data, q)
+                result = add_evals_to_archive(archive, acq_function, acq_optimizer, data, q, metadata)
             } else {
-                result = load_archive()
+                result = load_archive(metadata$table_name)
                 lines_to_keep <- metadata$num_random_lines
                 num_lines <- countLines(data) # count number of rows in table
                 data <- as.data.table(read.csv(data, header=FALSE, skip = num_lines-lines_to_keep)) 
@@ -232,7 +254,7 @@ def main():
                 print("Model archive so far: ")
                 print(archive)
                 q = metadata$num_random_lines
-                result = add_evals_to_archive(archive, acq_function, acq_optimizer, data, q)
+                result = add_evals_to_archive(archive, acq_function, acq_optimizer, data, q, metadata)
             }
             candidate = result[[1]]
             archive = result[[2]]
@@ -277,6 +299,8 @@ def main():
                 # Call the R function
                 rsum = ro.r["experiment"]
                 result = rsum(r_data, r_metadata, 1)
+
+                save_and_upload_results(metadata)
 
                 # Convert R data frame to pandas data frame
                 df = ro.conversion.get_conversion().rpy2py(result)
