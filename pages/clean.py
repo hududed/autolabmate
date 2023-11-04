@@ -1,7 +1,10 @@
 from sqlalchemy import MetaData, Table, inspect
 import pandas as pd
 import streamlit as st
+from streamlit_extras.switch_page_button import switch_page
 from utils import engine
+import re
+import time
 
 
 def drop_column_from_table(table_name, column_name):
@@ -18,46 +21,75 @@ def drop_column_from_table(table_name, column_name):
     else:
         st.write(f'Column "{column_name}" does not exist in table "{table_name}"')
 
+
+def sanitize_column_names(table):
+    # Sanitize column names
+    table.columns = [re.sub("[^0-9a-zA-Z_]", "", col) for col in table.columns]
+    table.columns = ["col_" + col if col[0].isdigit() else col for col in table.columns]
+    return table
+
+
 def main():
     # choose table in supabase via streamlit dropdown
     inspector = inspect(engine)
     table_names = inspector.get_table_names()
     if table_names:
-        table_name = st.selectbox("Select a table", table_names)
+        default_table = (
+            st.session_state.table_name
+            if "table_name" in st.session_state
+            else table_names[0]
+        )
+        table_name = st.selectbox(
+            "Select a table", table_names, index=table_names.index(default_table)
+        )
 
         # Load the table
-        if 'table' not in st.session_state or st.session_state.table_name != table_name:
+        if "table" not in st.session_state or st.session_state.table_name != table_name:
             st.session_state.table = pd.read_sql_table(table_name, engine)
             st.session_state.table_name = table_name
 
-        # Display the table
-        # st.dataframe(st.session_state.table)
-
         # Dropdown to select column to drop
-        drop_column = st.selectbox("Select a column to drop from database", ["None"] + list(st.session_state.table.columns))
+        drop_column = st.selectbox(
+            "Select a column to drop from database",
+            ["None"] + list(st.session_state.table.columns),
+        )
         if drop_column != "None":
             # Drop the column from the dataframe
             st.session_state.table = st.session_state.table.drop(columns=[drop_column])
             st.write(f"Dropped column: {drop_column}")
 
-            # Drop the column from the database tab le
+            # Drop the column from the database table
             drop_column_from_table(table_name, drop_column)
+
+        # Confirm drops button
+        if st.button("Confirm drops"):
+            # Sanitize column names
+            st.session_state.table = sanitize_column_names(st.session_state.table)
+
+            # Display a warning message
+            st.warning("Warning: The changes you are about to make are permanent.")
+            st.write(
+                "Column headers sanitized. The following table will be updated in the database:"
+            )
+            st.session_state.update_clicked = True
 
         # Display the updated table
         st.dataframe(st.session_state.table)
 
-        # Validate button
-        if st.button('Update Database Table'):
-            # Display a warning message
-            st.warning('Warning: The changes you are about to make are permanent.')
-            st.session_state.update_clicked = True
-
-        if 'update_clicked' in st.session_state and st.session_state.update_clicked and st.button('Confirm'):
+        if (
+            "update_clicked" in st.session_state
+            and st.session_state.update_clicked
+            and st.button("Update Table")
+        ):
             # Replace the table in the database with the new table
-            st.session_state.table.to_sql(table_name, engine, if_exists='replace', index=False)
+            st.session_state.table.to_sql(
+                table_name, engine, if_exists="replace", index=False
+            )
             st.write(f"Table {table_name} has been updated.")
             st.session_state.update_clicked = False
+            time.sleep(2)
+            switch_page("dashboard")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

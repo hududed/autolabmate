@@ -38,9 +38,10 @@ def login(credentials):
     return response
 
 
-def upload_to_bucket(bucket_name, file_name, file_content):
+def upload_to_bucket(bucket_name, table_name, file_name, file_content):
     # Generate new UUID for file name
-    new_file_name = str(uuid.uuid4()) + "-" + file_name
+    new_file_name = table_name + "/" + file_name
+    print(new_file_name)
     st.write(
         f'Uploading file "{file_name}" to bucket "{bucket_name}" as "{new_file_name}"'
     )
@@ -66,19 +67,6 @@ def insert_data(table_name, data):
         df.to_sql(table_name, conn, if_exists="replace", index=False)
         st.write(f'{data.name} inserted into table "{table_name}"')
 
-def drop_column_from_table(table_name, column_name):
-    # Reflect the table
-    metadata = MetaData()
-    db_table = Table(table_name, metadata, autoload_with=engine)
-
-    # Check if the column exists
-    if column_name in db_table.c:
-        # Drop the column
-        with engine.connect() as connection:
-            db_table.c[column_name].drop(db_table)
-        st.write(f"Dropped column {column_name} from database table {table_name}")
-    else:
-        st.write(f'Column "{column_name}" does not exist in table "{table_name}"')
 
 def display_table(table_name):
     # Query the table
@@ -115,6 +103,8 @@ def get_user_inputs(table, table_name):
     # Get optimization type
     optimization_type = st.selectbox("Select optimization type", ["single", "multi"])
 
+    direction = st.selectbox("Select optimization direction", ["minimize", "maximize"])
+
     # Get output column names
     if optimization_type == "single":
         output_column_names = [table.columns[-1]]
@@ -124,20 +114,10 @@ def get_user_inputs(table, table_name):
     # Get number of parameters
     num_parameters = len(table.columns) - len(output_column_names)
 
-    drop_column = st.selectbox("Select a column to drop from database", ["None"] + list(table.columns))
-    if drop_column != "None":
-        # Drop the column from the dataframe
-        table = table.drop(columns=[drop_column])
-        st.write(f"Dropped column: {drop_column}")
-
-        # Drop the column from the database table
-        drop_column_from_table(table_name, drop_column)
-
-
-        # Get number of random lines
-        num_random_lines = st.number_input(
-            "Enter the number of random lines", min_value=1, max_value=len(table)
-        )
+    # Get number of random lines
+    num_random_lines = st.number_input(
+        "Enter the number of random lines", min_value=1, max_value=len(table)
+    )
 
     # Get parameter info
     parameter_info = table.dtypes[: -len(output_column_names)].to_dict()
@@ -174,6 +154,7 @@ def get_user_inputs(table, table_name):
         num_random_lines,
         parameter_info,
         parameter_ranges,
+        direction,
     )
 
 
@@ -209,6 +190,7 @@ def display_dictionary(
     num_random_lines,
     parameter_info,
     parameter_ranges,
+    direction,
 ) -> Dict[str, Any]:
     metadata = {
         "table_name": table_name,
@@ -221,7 +203,7 @@ def display_dictionary(
         "parameter_ranges": parameter_ranges,
         "learner": "regr.ranger",
         "acquisition_function": "ei",
-        "direction": "minimize",
+        "direction": direction,
     }
     st.write(metadata)
     return metadata
