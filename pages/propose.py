@@ -7,10 +7,9 @@ from utils import (
     display_dictionary,
 )
 import pandas as pd
+import numpy as np
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
-from rpy2.robjects.conversion import localconverter
-from rpy2.robjects.vectors import ListVector, StrVector
 
 st.title("Propose Experiment")
 
@@ -20,11 +19,18 @@ def main():
     inspector = inspect(engine)
     table_names = inspector.get_table_names()
     if table_names:
-        table_name = st.selectbox("Select a table to display", table_names)
-
+        default_table = (
+            st.session_state.table_name
+            if "table_name" in st.session_state
+            else table_names[0]
+        )
+        table_name = st.selectbox(
+            "Select a table", table_names, index=table_names.index(default_table)
+        )
         # Load the selected table
         query = f"SELECT * FROM {table_name};"
         table = pd.read_sql_query(query, engine)
+
         (
             optimization_type,
             output_column_names,
@@ -32,6 +38,7 @@ def main():
             num_random_lines,
             parameter_info,
             parameter_ranges,
+            direction,
         ) = get_user_inputs(table, table_name)
 
         # Add validate button
@@ -52,6 +59,7 @@ def main():
                     num_random_lines,
                     parameter_info,
                     parameter_ranges,
+                    direction,
                 )
 
             # Define the mlr3 R functions
@@ -79,6 +87,14 @@ def main():
                 saveRDS(acq_optimizer, "acqopt.rds") # save to test-bucket objects e.g. test-bucket/{table_name}/acqopt.rds
             }
 
+            update_and_optimize <- function(acq_function, acq_optimizer, tmp_archive, candidate_new, lie) {
+                acq_function$surrogate$update()
+                acq_function$update()
+                tmp_archive$add_evals(xdt = candidate_new, xss_trafoed = transform_xdt_to_xss(candidate_new, tmp_archive$search_space), ydt = lie)
+                candidate_new = acq_optimizer$optimize()
+                return(candidate_new)
+            }
+
             add_evals_to_archive <- function(archive, acq_function, acq_optimizer, data, q) {
                 lie = data.table()
                 liar = min
@@ -95,27 +111,23 @@ def main():
                 if (!is.data.table(lie)) {
                     stop("lie is not a data.table")
                 }
-
-                # loops through batch size q, e.g. q should equal num_random_lines
+                candidate_new = candidate
                 for (i in seq_len(q)[-1L]) {
-                    tmp_archive$add_evals(xdt = candidate_new, xss_trafoed = transform_xdt_to_xss(candidate_new, tmp_archive$search_space), ydt = lie)
-                    acq_function$surrogate$update()
-                    acq_function$update()
-                    candidate_new = acq_optimizer$optimize()
+                    candidate_new = update_and_optimize(acq_function, acq_optimizer, tmp_archive, candidate_new, lie)
                     candidate = rbind(candidate, candidate_new)
-                    # print(candidate)
                 }
-                
+                candidate_new = update_and_optimize(acq_function, acq_optimizer, tmp_archive, candidate_new, lie)
                 # Iterate over each column in candidate
-                for (col in names(candidate)) {
+                for (col in names(candidate_new)) {
                     # If the column is numeric, round and format it
-                    if (is.double(candidate[[col]])) {
-                        candidate[[col]] <- format(round(candidate[[col]], 2), nsmall = 2)
+                    if (is.double(candidate_new[[col]])) {
+                        candidate_new[[col]] <- format(round(candidate_new[[col]], 2), nsmall = 2)
                     }
                 }
-                save_archive(tmp_archive, acq_function, acq_optimizer)
-                return(list(candidate, tmp_archive, acq_function))
-            }
+                
+                save_archive(archive, acq_function, acq_optimizer)
+                return(list(candidate, archive, acq_function))
+                }
 
             experiment <- function(data, metadata, s) {
             if(s==1) {
@@ -188,10 +200,10 @@ def main():
                                     terminator = trm("evals", n_evals = 1000),
                                     acq_function = acq_function)
                 q = as.integer(metadata$num_random_lines)
-                print(q)
-                print(acq_function)
-                print(acq_optimizer)
-                print(data)
+                # print(q)
+                # print(acq_function)
+                # print(acq_optimizer)
+                # print(data)
                 result = add_evals_to_archive(archive, acq_function, acq_optimizer, data, q)
             } else {
                 result = load_archive()
@@ -231,6 +243,8 @@ def main():
             x2 <- candidate[, names(metadata$parameter_info), with=FALSE]
             print("New candidates: ")
             print(x2)
+            print("New archive: ")
+            print(archive)
 
             x2_dt <- as.data.table(x2)
             data <- rbindlist(list(data, x2_dt), fill = TRUE)
@@ -254,6 +268,7 @@ def main():
                     else:
                         r_list[k] = ro.StrVector([str(v)])
                 return ro.ListVector(r_list)
+
             converter = ro.default_converter + pandas2ri.converter
             with converter.context():
                 r_data = ro.conversion.get_conversion().py2rpy(table)
@@ -268,7 +283,8 @@ def main():
 
             print(df)
             st.write(df)
-
+            # TODO: NaN appears as min largest value
+            # TODO: append proposals to table in supabase
             # TODO: save rds to test-bucket/{table_name}
 
 
