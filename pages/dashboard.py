@@ -1,6 +1,5 @@
 import streamlit as st
-from utils import display_table, engine, inspect
-from st_pages import hide_pages
+from utils import show_dashboard, engine, inspect
 
 
 st.title("Dashboard")
@@ -18,8 +17,8 @@ def main():
         table_name = st.selectbox(
             "Select a table", table_names, index=table_names.index(default_table)
         )
-        # table_name = st.selectbox('Select a table to display', table_names)
-        display_table(table_name)
+        if st.button("Confirm table selection"):
+            show_dashboard(table_name)
     else:
         st.write("No tables found in the database.")
 
