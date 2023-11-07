@@ -201,7 +201,7 @@ class CSVGenerator:
         self.get_input_values()
         self.get_parameter_info()
         self.get_data_header()
-        self.get_optimization_type()  # must be before get_data_header()
+        self.get_optimization_type()  # must be after get_data_header()
         self.get_parameter_ranges()
         self.generate_parameter_values()
         self.write_csv_file()
