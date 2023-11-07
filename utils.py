@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import altair as alt
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 from pathlib import Path
 import json
 from datetime import datetime
@@ -213,10 +213,24 @@ def retrieve_bucket_files(bucket_name):
     return files
 
 
-def query_table(table_name):
-    with engine.connect() as conn:
+def create_query(table_name, pair_param=None):
+    if pair_param:
+        query = f"SELECT {pair_param[0]}, {pair_param[1]} FROM {table_name}"
+    else:
         query = f"SELECT * FROM {table_name}"
+    return query
+
+
+def execute_query(query):
+    with engine.connect() as conn:
         df = pd.read_sql(query, conn)
+    return df
+
+
+# TODO: check if we really need a df with just pair_param cols, it appears that y in PDP prediction is not correct
+def query_table(table_name, pair_param=None):
+    query = create_query(table_name, pair_param)
+    df = execute_query(query)
     return df
 
 
@@ -239,17 +253,17 @@ def plot_output(df, col2):
 def plot_pairplot(df):
     sns.set_theme(context="talk")
     pairplot_fig = sns.pairplot(df, diag_kind="kde")
+    plt.suptitle("Pairplot of the DataFrame", size=20, y=1.02)
+
     st.pyplot(pairplot_fig)
 
 
-def plot_partial_dependence_graph(df):
+def plot_pdp(df):
     """
     Plot a partial dependence graph for the specified features.
 
     Parameters:
     df (pd.DataFrame): The DataFrame containing the data.
-    target_column (str): The name of the target column.
-    feature_names (list): The names of the features for which to plot the partial dependence.
     """
     # Define the model
     model = RandomForestRegressor()
@@ -258,8 +272,6 @@ def plot_partial_dependence_graph(df):
     X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
     y = df.iloc[:, -1]
 
-    print(X)
-
     # Fit the model
     model.fit(X, y)
 
@@ -267,11 +279,54 @@ def plot_partial_dependence_graph(df):
     pdp_results = partial_dependence(model, X, features=X.columns)
 
     # Plot the partial dependence
-    disp = PartialDependenceDisplay.from_estimator(
+    display = PartialDependenceDisplay.from_estimator(
         model, X, features=X.columns, kind="both"
     )
-    # disp.plot()
+    # Remove the legend
+    for ax in display.axes_.ravel():
+        ax.get_legend().remove()
 
+    display.figure_.suptitle("1-way numerical PDP using random forest", fontsize=16)
+    st.pyplot(plt)
+
+
+# add a 2-way interaction pdp plot, this function will only be called once user chooses which two parameters they want from a streamlit multi-box
+def plot_interaction_pdp(df: pd.DataFrame, features: list[Tuple[str, str]]):
+    """
+    Plot a 2-way interaction PDP for the specified features.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame containing the data.
+    features (tuple): The pair of features to plot.
+    """
+    print(f"!!! {df}")
+    print(f"!!! {features}")
+
+    # Define the model
+    model = RandomForestRegressor()
+
+    # Separate the features and the target
+    X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
+    y = df.iloc[:, -1]
+    print(f"!!! {X}")
+    print(f"!!! {y}")
+
+    # Fit the model
+    model.fit(X, y)
+
+    # Compute the interaction PDP
+    display = PartialDependenceDisplay.from_estimator(
+        model,
+        X,
+        features,
+        kind="average",
+    )
+
+    # Plot the interaction PDP
+    display.figure_.suptitle("2-way PDP using random forest", fontsize=16)
+    plt.show()
+
+    # Display the plot in Streamlit
     st.pyplot(plt)
 
 
@@ -282,7 +337,11 @@ def show_dashboard(table_name):
     col1.dataframe(df_styled)
     plot_output(df, col2)
     plot_pairplot(df)
-    plot_partial_dependence_graph(df)
+    plot_pdp(df)
+
+
+def show_interaction_pdp(df, pair_param: list[Tuple[str, str]]):
+    plot_interaction_pdp(df, pair_param)
 
 
 def get_user_inputs(table):
@@ -428,4 +487,36 @@ def replace_value_with_nan(df: pd.DataFrame, value=-2147483648) -> pd.DataFrame:
     """
     if (df.values == value).any():
         df.replace(value, np.nan, inplace=True)
+    return df
+
+
+def get_features(table_name):
+    """
+    Get a list of features i.e., all columns except the last column.
+
+    Parameters:
+    table_name (str): The name of the table.
+
+    Returns:
+    list: The list of features.
+    """
+    df = pd.read_sql_table(table_name, engine)
+
+    # Return all columns except the last one
+    features = df.columns.tolist()[:-1]
+    print(features)
+    return features
+
+
+def get_dataframe(table_name):
+    """
+    Get a DataFrame from a table name.
+
+    Parameters:
+    table_name (str): The name of the table.
+
+    Returns:
+    pd.DataFrame: The DataFrame.
+    """
+    df = pd.read_sql_table(table_name, engine)
     return df
