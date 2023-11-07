@@ -143,17 +143,13 @@ class CSVGenerator:
             for j in range(self.series):
                 if self.param_types[j] == "Integer":
                     min_val, max_val = self.param_ranges[j]
-                    value = int(norm.ppf(samples[i, j], min_val, max_val))
+                    value = int(samples[i, j] * (max_val - min_val) + min_val)
                 elif self.param_types[j] == "Float":
                     min_val, max_val = self.param_ranges[j]
-                    value = format(
-                        round(norm.ppf(samples[i, j], min_val, max_val), 2), ".2f"
-                    )
+                    value = format(samples[i, j] * (max_val - min_val) + min_val, ".2f")
                 else:
                     categories = self.param_ranges[j]
-                    value = categories[
-                        int(norm.ppf(samples[i, j], 0, len(categories) - 1))
-                    ]
+                    value = categories[int(samples[i, j] * (len(categories) - 1))]
                 values.append(value)
             self.param_values.append(values)
 
