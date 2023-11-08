@@ -206,5 +206,8 @@ pip-selfcheck.json
 # macos
 *.DS_*
 
+# R code
+*.R
+
 
 # End of https://www.toptal.com/developers/gitignore/api/python,venv,dotenv,data
