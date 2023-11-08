@@ -25,7 +25,7 @@ Autolabmate uses Supabase for database management. To set it up, follow these st
 Autolabmate uses environment variables for configuration. These are stored in a `.env` file. To set this up, follow these steps:
 
 1. Open the `.env.default` file in the root of the project.
-2. Fill in the `SUPABASE_URL`, `SUPABASE_KEY`, and `POSTGRES_KEY` variables with the values from your Supabase project.
+2. Fill in the `SUPABASE_URL`, `SUPABASE_KEY`, and `PG_PASS` variables with the values from your Supabase project.
 3. Rename the `.env.default` file to `.env`.
 
 Now, Autolabmate is configured and ready to run.
