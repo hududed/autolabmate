@@ -15,9 +15,6 @@ from utils import (
 import pandas as pd
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
-from streamlit_extras.switch_page_button import switch_page
-from time import sleep
-import json
 
 st.title("Propose Experiment")
 
@@ -291,13 +288,14 @@ def main():
 
                 # store metadata in session_state
                 st.write(
+                    "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"
+                )
+                st.write(
                     f"Files downloaded to local directory: /{bucket_name}/{table_name}/{batch_number}"
                 )
                 st.write(
-                    f"Run the proposed batch of experiments and proceed to `update` the model."
+                    "Run the proposed batch of experiments and proceed to `update` the model."
                 )
-                sleep(10)
-                # switch_page("update")
 
 
 if __name__ == "__main__":

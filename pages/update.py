@@ -2,13 +2,10 @@ import streamlit as st
 from utils import (
     engine,
     inspector,
-    get_user_inputs,
     validate_inputs,
-    display_dictionary,
     save_and_upload_results,
     load_metadata,
     py_dict_to_r_list,
-    py_dict_to_r_named_vector,
     save_to_local,
     upload_local_to_bucket,
     save_metadata,
@@ -17,10 +14,6 @@ from utils import (
 import pandas as pd
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
-from streamlit_extras.switch_page_button import switch_page
-from time import sleep
-import json
-from datetime import datetime
 
 st.title("Update Experiment")
 
@@ -291,6 +284,16 @@ def main():
                 # st.write(f"Table {table_name} has been updated.")
                 st.session_state.update_clicked = False
                 st.session_state.button_start_ml = False
+
+                st.write(
+                    "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"
+                )
+                st.write(
+                    f"Files downloaded to local directory: /{bucket_name}/{table_name}/{batch_number}"
+                )
+                st.write(
+                    "Run the proposed batch of experiments and proceed to `update` the model."
+                )
 
 
 if __name__ == "__main__":
