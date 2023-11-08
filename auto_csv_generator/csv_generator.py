@@ -26,6 +26,11 @@ class CSVGenerator:
             "Select randomization type:", ["Random", "Latin Hypercube", "Sobol"]
         )
 
+    def get_precision(self) -> None:
+        self.precision = st.number_input(
+            "Enter the precision for float values:", value=1, min_value=0, max_value=3
+        )
+
     def get_input_values(self) -> None:
         self.series = st.number_input("Number of parameters:", value=3)
         self.nr_random_lines = st.number_input("Number of random lines:", value=10)
@@ -126,7 +131,7 @@ class CSVGenerator:
                     value = randrange(min_val, max_val + 1, 1)
                 elif self.param_types[j] == "Float":
                     min_val, max_val = self.param_ranges[j]
-                    value = format(round(uniform(min_val, max_val), 2), ".2f")
+                    value = round(uniform(min_val, max_val), self.precision)
                 else:
                     categories = self.param_ranges[j]
                     value = categories[randrange(len(categories))]
@@ -146,7 +151,9 @@ class CSVGenerator:
                     value = int(samples[i, j] * (max_val - min_val) + min_val)
                 elif self.param_types[j] == "Float":
                     min_val, max_val = self.param_ranges[j]
-                    value = format(samples[i, j] * (max_val - min_val) + min_val, ".2f")
+                    value = round(
+                        samples[i, j] * (max_val - min_val) + min_val, self.precision
+                    )
                 else:
                     categories = self.param_ranges[j]
                     value = categories[int(samples[i, j] * (len(categories) - 1))]
@@ -166,7 +173,9 @@ class CSVGenerator:
                     value = int(samples[i, j] * (max_val - min_val) + min_val)
                 elif self.param_types[j] == "Float":
                     min_val, max_val = self.param_ranges[j]
-                    value = format(samples[i, j] * (max_val - min_val) + min_val, ".2f")
+                    value = round(
+                        samples[i, j] * (max_val - min_val) + min_val, self.precision
+                    )
                 else:
                     categories = self.param_ranges[j]
                     value = categories[int(samples[i, j] * (len(categories) - 1))]
@@ -199,6 +208,7 @@ class CSVGenerator:
         self.get_data_header()
         self.get_optimization_type()  # must be after get_data_header()
         self.get_parameter_ranges()
+        self.get_precision()
         self.generate_parameter_values()
         self.write_csv_file()
         self.download_csv_file()
