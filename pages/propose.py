@@ -1,22 +1,33 @@
 import streamlit as st
 from utils import (
     engine,
-    inspect,
+    inspector,
     get_user_inputs,
     validate_inputs,
     display_dictionary,
     save_and_upload_results,
+    save_metadata,
+    py_dict_to_r_list,
+    upload_local_to_bucket,
+    save_to_local,
+    replace_value_with_nan,
 )
 import pandas as pd
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
+from streamlit_extras.switch_page_button import switch_page
+from time import sleep
+import json
 
 st.title("Propose Experiment")
 
 
 def main():
+    # Reset st.session_state.button_start_ml to False when the page is loaded
+    if "button_start_ml" not in st.session_state or st.session_state.button_start_ml:
+        st.session_state.button_start_ml = False
     # choose table in supabase via streamlit dropdown
-    inspector = inspect(engine)
+    # inspector = inspect(engine)
     table_names = inspector.get_table_names()
     if table_names:
         default_table = (
@@ -32,6 +43,7 @@ def main():
         table = pd.read_sql_query(query, engine)
 
         (
+            batch_number,
             optimization_type,
             output_column_names,
             num_parameters,
@@ -39,7 +51,7 @@ def main():
             parameter_info,
             parameter_ranges,
             direction,
-        ) = get_user_inputs(table, table_name)
+        ) = get_user_inputs(table)
 
         # Add validate button
         if st.button("Validate"):
@@ -51,7 +63,8 @@ def main():
                     st.write(error)
             else:
                 st.write("Validation passed.")
-                metadata = display_dictionary(
+                st.session_state.metadata = display_dictionary(
+                    batch_number,
                     table_name,
                     optimization_type,
                     output_column_names,
@@ -62,6 +75,14 @@ def main():
                     direction,
                 )
 
+        # Add Start ML button
+        if "button_start_ml" not in st.session_state:
+            st.session_state.button_start_ml = False
+
+        if st.button("Start ML"):
+            st.session_state.button_start_ml = not st.session_state.button_start_ml
+
+        if st.session_state.button_start_ml:
             # Define the mlr3 R functions
             ro.r(
                 """
@@ -72,31 +93,12 @@ def main():
             library(data.table)
             library(tibble)
 
-
-            load_archive <- function(table_name) {
-                # Get a list of all files in the bucket
-                files = list.files(path = paste0(metadata$bucket_name, "/", table_name), pattern = "*.rds", full.names = TRUE)
-                
-                # Filter for the latest archive, acqf, and acqopt files
-                archive_file = max(grep("archive", files, value = TRUE))
-                acqf_file = max(grep("acqf", files, value = TRUE))
-                acqopt_file = max(grep("acqopt", files, value = TRUE))
-                
-                # Load the files
-                archive = readRDS(archive_file)
-                acq_function = readRDS(acqf_file)
-                acq_optimizer = readRDS(acqopt_file)
-                
-                acq_function$surrogate$archive = archive
-                return(list(archive, acq_function, acq_optimizer))
-            }
-
             save_archive <- function(archive, acq_function, acq_optimizer, metadata) {
                 # Get the current timestamp
                 timestamp = format(Sys.time(), "%Y%m%d%H%M%S")
 
                 # Define the directory path
-                dir_path = paste0(metadata$bucket_name, "/", metadata$table_name)
+                dir_path = paste0(metadata$bucket_name, "/", metadata$table_name, "/", metadata$batch_number)
                 
                 # Create the directory if it doesn't exist
                 if (!dir.exists(dir_path)) {
@@ -104,9 +106,9 @@ def main():
                 }
                 
                 # Save the objects to files
-                saveRDS(archive, paste0(metadata$bucket_name, "/", metadata$table_name, "/archive-", timestamp, ".rds"))
-                saveRDS(acq_function, paste0(metadata$bucket_name, "/", metadata$table_name, "/acqf-", timestamp, ".rds"))
-                saveRDS(acq_optimizer, paste0(metadata$bucket_name, "/", metadata$table_name, "/acqopt-", timestamp, ".rds"))
+                saveRDS(archive, paste0(dir_path,  "/archive-", timestamp, ".rds"))
+                saveRDS(acq_function, paste0(dir_path, "/acqf-", timestamp, ".rds"))
+                saveRDS(acq_optimizer, paste0(dir_path, "/acqopt-", timestamp, ".rds"))
             }
 
             update_and_optimize <- function(acq_function, acq_optimizer, tmp_archive, candidate_new, lie) {
@@ -151,12 +153,10 @@ def main():
                 return(list(candidate, archive, acq_function))
                 }
 
-            experiment <- function(data, metadata, s) {
-            if(s==1) {
-                require(XML)
+            experiment <- function(data, metadata) {
                 set.seed(42)
                 data = as.data.table(data) # data.csv is queried `table`
- 
+
                 # retrieve this from metadata parameter_ranges
                 search_space = ParamSet$new(params = list())
                 # Loop through metadata$parameter_info
@@ -212,7 +212,7 @@ def main():
 
                 # Use parameter_info in the subset operation
                 archive$add_evals(xdt = data[, names(metadata$parameter_info), with=FALSE], ydt = data[, metadata$output_column_names, with=FALSE])
-             
+            
 
                 print("Model archive so far: ")
                 print(archive)
@@ -227,89 +227,77 @@ def main():
                 # print(acq_optimizer)
                 # print(data)
                 result = add_evals_to_archive(archive, acq_function, acq_optimizer, data, q, metadata)
-            } else {
-                result = load_archive(metadata$table_name)
-                lines_to_keep <- metadata$num_random_lines
-                num_lines <- countLines(data) # count number of rows in table
-                data <- as.data.table(read.csv(data, header=FALSE, skip = num_lines-lines_to_keep)) 
-                names(data) <- c(metadata$parameter_info, metadata$output_column_names)
-                    
-                archive = result[[1]]
-                acq_function = result[[2]]
-                acq_optimizer = result[[3]]
-                
-                # Check if metadata$output_column_names is NULL or empty
-                if (is.null(metadata$output_column_names) || length(metadata$output_column_names) == 0) {
-                    stop("metadata$output_column_names is NULL or empty")
-                }
 
-                # Check if all output_column_names exist in data
-                if (!all(metadata$output_column_names %in% names(data))) {
-                    stop("Some names in metadata$output_column_names do not exist in data")
-                }
+                candidate = result[[1]]
+                archive = result[[2]]
+                acq_function = result[[3]]
 
+                print(result)
 
-                # Now you can safely call the add_evals method
-                archive$add_evals(xdt = data[, param_names, with=FALSE], ydt = data[, metadata$output_column_names, with=FALSE])
-                print("Model archive so far: ")
+                x2 <- candidate[, names(metadata$parameter_info), with=FALSE]
+                print("New candidates: ")
+                print(x2)
+                print("New archive: ")
                 print(archive)
-                q = metadata$num_random_lines
-                result = add_evals_to_archive(archive, acq_function, acq_optimizer, data, q, metadata)
-            }
-            candidate = result[[1]]
-            archive = result[[2]]
-            acq_function = result[[3]]
 
-            print(result)
+                x2_dt <- as.data.table(x2)
+                data <- rbindlist(list(data, x2_dt), fill = TRUE)
+                print(data)
+                print("Returning data to streamlit")
+                return(data)
 
-            x2 <- candidate[, names(metadata$parameter_info), with=FALSE]
-            print("New candidates: ")
-            print(x2)
-            print("New archive: ")
-            print(archive)
-
-            x2_dt <- as.data.table(x2)
-            data <- rbindlist(list(data, x2_dt), fill = TRUE)
-            print(data)
-            print("Returning data to streamlit")
-            return(data)
-
-            }
+                }
             """
             )
 
             pandas2ri.activate()
 
-            def py_dict_to_r_list(py_dict):
-                r_list = {}
-                for k, v in py_dict.items():
-                    if isinstance(v, dict):
-                        r_list[k] = py_dict_to_r_list(v)
-                    elif isinstance(v, list):
-                        r_list[k] = ro.StrVector(v)
-                    else:
-                        r_list[k] = ro.StrVector([str(v)])
-                return ro.ListVector(r_list)
-
             converter = ro.default_converter + pandas2ri.converter
             with converter.context():
                 r_data = ro.conversion.get_conversion().py2rpy(table)
-                r_metadata = py_dict_to_r_list(metadata)
+                r_metadata = py_dict_to_r_list(st.session_state.metadata)
 
                 # Call the R function
                 rsum = ro.r["experiment"]
-                result = rsum(r_data, r_metadata, 1)
+                result = rsum(r_data, r_metadata)
 
-                save_and_upload_results(metadata)
+                save_and_upload_results(st.session_state.metadata, batch_number)
 
                 # Convert R data frame to pandas data frame
                 df = ro.conversion.get_conversion().rpy2py(result)
 
-            print(df)
-            st.write(df)
-            # TODO: NaN appears as min largest value
-            # TODO: append proposals to table in supabase
-            # TODO: save rds to test-bucket/{table_name}
+                # Replace -2147483648 with np.nan if -2147483648 exists in the DataFrame
+                replace_value_with_nan(df)
+
+                save_metadata(st.session_state.metadata, table_name, batch_number)
+
+                bucket_name = st.session_state.metadata["bucket_name"]
+                batch_number = st.session_state.metadata["batch_number"]
+
+                upload_local_to_bucket(bucket_name, table_name, batch_number)
+
+                output_file_name = f"{batch_number}-data.csv"
+                save_to_local(
+                    bucket_name, table_name, output_file_name, df, batch_number
+                )
+
+                # TODO: NaN appears as min largest value
+                # st.write(f"Table {table_name} has been updated.")
+                st.session_state.update_clicked = False
+                st.session_state.button_start_ml = False
+
+                print(df)
+                st.write(df)
+
+                # store metadata in session_state
+                st.write(
+                    f"Files downloaded to local directory: /{bucket_name}/{table_name}/{batch_number}"
+                )
+                st.write(
+                    f"Run the proposed batch of experiments and proceed to `update` the model."
+                )
+                sleep(10)
+                # switch_page("update")
 
 
 if __name__ == "__main__":

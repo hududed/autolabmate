@@ -75,6 +75,7 @@ def upload_to_bucket(bucket_name, table_name, file_name, file_content, batch_num
 
 
 def save_to_local(bucket_name, table_name, file_name, df, batch_number=1):
+    table_name = table_name.lower()
     new_file_name = f"{bucket_name}/{table_name}/{batch_number}/{file_name}"
     print(new_file_name)
 
@@ -189,6 +190,7 @@ def save_and_upload_results(metadata, batch_number=1):
 
 
 def create_table(table_name):
+    table_name = table_name.lower()
     # Create new table
     with engine.connect() as conn:
         query = text(
@@ -199,6 +201,7 @@ def create_table(table_name):
 
 
 def insert_data(table_name, data):
+    table_name = table_name.lower()
     # Insert data into table
     with engine.connect() as conn:
         df = pd.read_csv(data)
@@ -291,25 +294,23 @@ def plot_pdp(df):
 
 
 # add a 2-way interaction pdp plot, this function will only be called once user chooses which two parameters they want from a streamlit multi-box
-def plot_interaction_pdp(df: pd.DataFrame, features: list[Tuple[str, str]]):
+def plot_interaction_pdp(
+    df: pd.DataFrame, features: list[Tuple[str, str]], overlay: bool = None
+):
     """
     Plot a 2-way interaction PDP for the specified features.
 
     Parameters:
     df (pd.DataFrame): The DataFrame containing the data.
     features (tuple): The pair of features to plot.
+    overlay (bool): Whether to overlay the actual feature pair points.
     """
-    print(f"!!! {df}")
-    print(f"!!! {features}")
-
     # Define the model
     model = RandomForestRegressor()
 
     # Separate the features and the target
     X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
     y = df.iloc[:, -1]
-    print(f"!!! {X}")
-    print(f"!!! {y}")
 
     # Fit the model
     model.fit(X, y)
@@ -321,6 +322,10 @@ def plot_interaction_pdp(df: pd.DataFrame, features: list[Tuple[str, str]]):
         features,
         kind="average",
     )
+
+    # Overlay the actual feature pair points if overlay is True
+    if overlay:
+        plt.scatter(df[features[0]], df[features[1]], c="r", s=30, edgecolor="k")
 
     # Plot the interaction PDP
     display.figure_.suptitle("2-way PDP using random forest", fontsize=16)
@@ -340,8 +345,8 @@ def show_dashboard(table_name):
     plot_pdp(df)
 
 
-def show_interaction_pdp(df, pair_param: list[Tuple[str, str]]):
-    plot_interaction_pdp(df, pair_param)
+def show_interaction_pdp(df, pair_param: list[Tuple[str, str]], overlay: bool = None):
+    plot_interaction_pdp(df, pair_param, overlay)
 
 
 def get_user_inputs(table):
@@ -364,7 +369,10 @@ def get_user_inputs(table):
 
     # Get number of random lines
     num_random_lines = st.number_input(
-        "Enter the number of random lines", min_value=1, max_value=len(table)
+        "Enter the number of random lines",
+        min_value=1,
+        max_value=len(table),
+        value=len(table),
     )
 
     # Get parameter info
@@ -472,6 +480,23 @@ def py_dict_to_r_list(py_dict):
         else:
             r_list.rx2[k] = ro.StrVector([str(v)])
     return r_list
+
+
+def py_dict_to_r_named_vector(py_dict):
+    r_vector = ro.StrVector([])
+    names = []
+    for k, v in py_dict.items():
+        if isinstance(v, dict):
+            r_vector = ro.r.c(r_vector, py_dict_to_r_named_vector(v))
+            names.extend([f"{k}.{sub_k}" for sub_k in v.keys()])
+        elif isinstance(v, list):
+            r_vector = ro.r.c(r_vector, ro.StrVector([str(i) for i in v]))
+            names.extend([k] * len(v))
+        else:
+            r_vector = ro.r.c(r_vector, ro.StrVector([str(v)]))
+            names.append(k)
+    r_vector.names = ro.StrVector(names)
+    return r_vector
 
 
 def replace_value_with_nan(df: pd.DataFrame, value=-2147483648) -> pd.DataFrame:

@@ -2,9 +2,9 @@ from sqlalchemy import MetaData, Table, inspect
 import pandas as pd
 import streamlit as st
 from streamlit_extras.switch_page_button import switch_page
-from utils import engine
+from utils import engine, save_to_local, upload_local_to_bucket
 import re
-import time
+from time import sleep
 
 
 def drop_column_from_table(table_name, column_name):
@@ -35,12 +35,14 @@ def main():
     table_names = inspector.get_table_names()
     if table_names:
         default_table = (
-            st.session_state.table_name
+            st.session_state.table_name.lower()
             if "table_name" in st.session_state
-            else table_names[0]
+            else table_names[0].lower()
         )
         table_name = st.selectbox(
-            "Select a table", table_names, index=table_names.index(default_table)
+            "Select a table",
+            [name.lower() for name in table_names],
+            index=[name.lower() for name in table_names].index(default_table),
         )
 
         # Load the table
@@ -85,9 +87,16 @@ def main():
             st.session_state.table.to_sql(
                 table_name, engine, if_exists="replace", index=False
             )
+            bucket_name = "test-bucket"
+            output_file_name = "cleaned-data.csv"
+            save_to_local(
+                bucket_name, table_name, output_file_name, st.session_state.table
+            )
+            upload_local_to_bucket(bucket_name, table_name, file_extension=".csv")
+
             st.write(f"Table {table_name} has been updated.")
             st.session_state.update_clicked = False
-            time.sleep(2)
+            sleep(2)
             switch_page("dashboard")
 
 
