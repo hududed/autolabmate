@@ -1,3 +1,7 @@
+import os
+
+os.environ["R_HOME"] = "/Library/Frameworks/R.framework/Resources/bin/R"
+
 import streamlit as st
 from components.authenticate import supabase_client
 from st_pages import show_pages, Page, hide_pages
