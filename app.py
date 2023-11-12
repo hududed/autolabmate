@@ -1,6 +1,6 @@
-import os
+# import os
 
-os.environ["R_HOME"] = "/usr/local/bin/R"
+# os.environ["R_HOME"] = "/usr/local/bin/R"
 
 import streamlit as st
 from components.authenticate import supabase_client
