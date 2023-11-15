@@ -295,14 +295,14 @@ def plot_pdp(df):
 
 # add a 2-way interaction pdp plot, this function will only be called once user chooses which two parameters they want from a streamlit multi-box
 def plot_interaction_pdp(
-    df: pd.DataFrame, features: list[Tuple[str, str]], overlay: bool = None
+    df: pd.DataFrame, features_list: list[Tuple[str, str]], overlay: bool = None
 ):
     """
-    Plot a 2-way interaction PDP for the specified features.
+    Plot a 2-way interaction PDP for each pair of features in the list.
 
     Parameters:
     df (pd.DataFrame): The DataFrame containing the data.
-    features (tuple): The pair of features to plot.
+    features_list (list): The list of pairs of features to plot.
     overlay (bool): Whether to overlay the actual feature pair points.
     """
     # Define the model
@@ -315,24 +315,42 @@ def plot_interaction_pdp(
     # Fit the model
     model.fit(X, y)
 
-    # Compute the interaction PDP
-    display = PartialDependenceDisplay.from_estimator(
-        model,
-        X,
-        features,
-        kind="average",
-    )
+    for features in features_list:
+        # Unpack the features tuple
+        feature1, feature2 = features
 
-    # Overlay the actual feature pair points if overlay is True
-    if overlay:
-        plt.scatter(df[features[0]], df[features[1]], c="r", s=30, edgecolor="k")
+        # Check if the selected features exist in the DataFrame
+        if not {feature1, feature2}.issubset(df.columns):
+            st.error(f"The selected features {features} must exist in the DataFrame.")
+            continue
 
-    # Plot the interaction PDP
-    display.figure_.suptitle("2-way PDP using random forest", fontsize=16)
-    plt.show()
+        # Check if the selected features are numeric
+        if not np.issubdtype(df[feature1].dtype, np.number) or not np.issubdtype(
+            df[feature2].dtype, np.number
+        ):
+            st.warning(f"The selected features {features} must be numeric.")
+            continue
 
-    # Display the plot in Streamlit
-    st.pyplot(plt)
+        # Compute the interaction PDP
+        display = PartialDependenceDisplay.from_estimator(
+            model,
+            X,
+            [features],
+            kind="average",
+        )
+
+        # Overlay the actual feature pair points if overlay is True
+        if overlay:
+            plt.scatter(df[feature1], df[feature2], c="r", s=30, edgecolor="k")
+
+        # Plot the interaction PDP
+        display.figure_.suptitle(
+            f"2-way PDP for {features} using random forest", fontsize=16
+        )
+        plt.show()
+
+        # Display the plot in Streamlit
+        st.pyplot(plt)
 
 
 def show_dashboard(table_name):

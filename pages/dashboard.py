@@ -9,7 +9,7 @@ from utils import (
 )
 from st_pages import hide_pages
 
-
+# st.set_page_config(layout="wide")
 st.title("Dashboard")
 
 
