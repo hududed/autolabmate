@@ -5,6 +5,7 @@ from streamlit_extras.switch_page_button import switch_page
 from utils import engine, save_to_local, upload_local_to_bucket
 import re
 from time import sleep
+from st_pages import hide_pages
 
 
 def drop_column_from_table(table_name, column_name):
@@ -30,6 +31,9 @@ def sanitize_column_names(table):
 
 
 def main():
+    if not st.session_state.authentication_status:
+        st.info("Please Login from the Home page and try again.")
+        st.stop()
     # choose table in supabase via streamlit dropdown
     inspector = inspect(engine)
     table_names = inspector.get_table_names()

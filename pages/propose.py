@@ -15,11 +15,15 @@ from utils import (
 import pandas as pd
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
+from st_pages import hide_pages
 
 st.title("Propose Experiment")
 
 
 def main():
+    if not st.session_state.authentication_status:
+        st.info("Please Login from the Home page and try again.")
+        st.stop()
     # Reset st.session_state.button_start_ml to False when the page is loaded
     if "button_start_ml" not in st.session_state or st.session_state.button_start_ml:
         st.session_state.button_start_ml = False

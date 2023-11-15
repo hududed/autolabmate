@@ -1,6 +1,7 @@
 import streamlit as st
 from utils import create_table, insert_data, upload_local_to_bucket, save_to_local
 from streamlit_extras.switch_page_button import switch_page
+from st_pages import hide_pages
 from time import sleep
 import pandas as pd
 
@@ -9,6 +10,10 @@ st.title("Upload first batch CSV")
 
 
 def main():
+    if not st.session_state.authentication_status:
+        st.info("Please Login from the Home page and try again.")
+        st.stop()
+
     st.write("Please upload your first batch CSV file to create a new table.")
     file = st.file_uploader("Upload first batch CSV", type="csv")
     if file is not None:

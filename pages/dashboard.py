@@ -7,12 +7,16 @@ from utils import (
     get_features,
     query_table,
 )
+from st_pages import hide_pages
 
 
 st.title("Dashboard")
 
 
 def main():
+    if not st.session_state.authentication_status:
+        st.info("Please Login from the Home page and try again.")
+        st.stop()
     inspector = inspect(engine)
     table_names = inspector.get_table_names()
     if table_names:

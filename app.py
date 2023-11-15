@@ -1,18 +1,14 @@
-# import os
-
-# os.environ["R_HOME"] = "/usr/local/bin/R"
-
 import streamlit as st
 from components.authenticate import supabase_client
 from st_pages import show_pages, Page, hide_pages
 from streamlit_extras.switch_page_button import switch_page
+from time import sleep
 
 st.title("Welcome to Autolabmate!")
 
 
 # Login form
 def login():
-    hide_pages(["upload", "dashboard"])
     st.header("Login")
     email = st.text_input("Email")
     password = st.text_input("Password", type="password")
@@ -25,8 +21,8 @@ def login():
 
         if user:
             st.success("Logged In Sucessfully {}".format(email))
+            st.session_state.authentication_status = True
 
-            hide_pages(["home"])
             show_pages(
                 [
                     Page("pages/generate.py", "generate", icon="📝"),
@@ -35,12 +31,16 @@ def login():
                     Page("pages/dashboard.py", "dashboard", icon="📈"),
                     Page("pages/propose.py", "propose", icon="🤖"),
                     Page("pages/update.py", "update", icon="🔄"),
+                    Page("pages/logout.py", "logout", icon="🚪"),
+                    Page("app.py", ""),
                 ]
             )
+
             switch_page("Upload")  # switch to second page
 
         else:
             st.error("Invalid email or password")
+            st.session_state.authentication_status = False
 
 
 # Sign-up form
@@ -58,8 +58,23 @@ def signup():
             st.error("Registration failed!")
 
 
+# Logout page
+def logout():
+    st.session_state.authentication_status = False  # set the logged_in state to False
+    res = supabase_client.auth.sign_out()
+    if res:
+        st.error(f"Error logging out: {res}")
+    else:
+        st.success("Logged out successfully")
+        sleep(5)
+        switch_page("")  # switch back to the login page
+
+
 # Run the Streamlit app
 def main():
+    if "authentication_status" not in st.session_state:
+        st.session_state.authentication_status = False
+
     show_pages([Page("app.py", "home")])
     # Display the login or sign-up form based on user selection
     form_choice = st.selectbox("Select an option:", ("Login", "Sign Up"))
@@ -68,6 +83,8 @@ def main():
         login()
     elif form_choice == "Sign Up":
         signup()
+    # elif st.session_state.authentication_status:
+    #     logout()
 
 
 if __name__ == "__main__":
