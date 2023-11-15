@@ -26,9 +26,13 @@ class CSVGenerator:
         )
 
     def get_precision(self) -> None:
-        self.precision = st.number_input(
-            "Enter the precision for float values:", value=1, min_value=0, max_value=3
-        )
+        if "Float" in self.param_types:
+            self.precision = st.number_input(
+                "Enter the precision for float values:",
+                value=1,
+                min_value=0,
+                max_value=3,
+            )
 
     def get_input_values(self) -> None:
         self.series = st.number_input("Number of parameters:", value=3)
