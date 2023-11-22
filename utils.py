@@ -47,8 +47,10 @@ def login(credentials):
     return response
 
 
-def upload_to_bucket(bucket_name, table_name, file_name, file_content, batch_number=1):
-    new_file_name = f"{table_name}/{batch_number}/{file_name}"
+def upload_to_bucket(
+    bucket_name, user_id, table_name, file_name, file_content, batch_number=1
+):
+    new_file_name = f"{user_id}/{table_name}/{batch_number}/{file_name}"
     print(new_file_name)
 
     st.write(
@@ -74,9 +76,9 @@ def upload_to_bucket(bucket_name, table_name, file_name, file_content, batch_num
             raise e
 
 
-def save_to_local(bucket_name, table_name, file_name, df, batch_number=1):
+def save_to_local(bucket_name, user_id, table_name, file_name, df, batch_number=1):
     table_name = table_name.lower()
-    new_file_name = f"{bucket_name}/{table_name}/{batch_number}/{file_name}"
+    new_file_name = f"{bucket_name}/{user_id}/{table_name}/{batch_number}/{file_name}"
     print(new_file_name)
 
     try:
@@ -133,15 +135,15 @@ def load_metadata(
 
 
 def upload_local_to_bucket(
-    bucket_name, table_name, batch_number=1, file_extension=".rds"
+    bucket_name, user_id, table_name, batch_number=1, file_extension=".rds"
 ):
     # Extract file name from file path
-    base_path = Path(f"{bucket_name}/{table_name}/{batch_number}")
+    base_path = Path(f"{bucket_name}/{user_id}/{table_name}/{batch_number}")
     files = [file for file in base_path.glob(f"*{file_extension}")]
 
     for file in files:
         file_name = file.name
-        new_file_name = f"{table_name}/{batch_number}/{file_name}"
+        new_file_name = f"{user_id}/{table_name}/{batch_number}/{file_name}"
 
         # Read file content
         with open(file, "rb") as f:

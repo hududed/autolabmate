@@ -18,6 +18,7 @@ def main():
 
     if "table_name" not in st.session_state:
         st.session_state.table_name = ""
+    user_id = st.session_state.user_id
 
     st.write("Please upload your first batch CSV file.")
     file = st.file_uploader("Upload first batch CSV", type="csv")
@@ -61,14 +62,16 @@ def main():
 
             st.session_state.update_clicked = True
 
-            insert_data(table_name, df, st.session_state.user_id)
+            insert_data(table_name, df, user_id)
 
             bucket_name = "test-bucket"
             file.seek(0)  # Reset the file pointer to the beginning
             df = pd.read_csv(file)
             output_file_name = "raw-data.csv"
-            save_to_local(bucket_name, table_name, output_file_name, df)
-            upload_local_to_bucket(bucket_name, table_name, file_extension=".csv")
+            save_to_local(bucket_name, user_id, table_name, output_file_name, df)
+            upload_local_to_bucket(
+                bucket_name, user_id, table_name, file_extension=".csv"
+            )
             st.write("Head to `dashboard` to see your data! :fire:")
 
 
