@@ -1,8 +1,13 @@
 import streamlit as st
 from components.authenticate import supabase_client
-from st_pages import show_pages, Page, hide_pages
+from st_pages import show_pages, Page
 from streamlit_extras.switch_page_button import switch_page
 from time import sleep
+from utils import (
+    enable_rls,
+    create_policy,
+    create_experiments_table,
+)
 
 st.title("Welcome to Autolabmate!")
 
@@ -15,13 +20,14 @@ def login():
 
     if st.button("Login"):
         # Retrieve user details from the database
-        user = supabase_client.auth.sign_in_with_password(
+        response = supabase_client.auth.sign_in_with_password(
             credentials={"email": email, "password": password}
         )
 
-        if user:
+        if response:
             st.success("Logged In Sucessfully {}".format(email))
             st.session_state.authentication_status = True
+            st.session_state.user_id = response.user.id
 
             show_pages(
                 [
@@ -76,6 +82,11 @@ def main():
         st.session_state.authentication_status = False
 
     show_pages([Page("app.py", "home")])
+
+    create_experiments_table()
+    enable_rls("experiments")
+    create_policy("experiments")
+
     # Display the login or sign-up form based on user selection
     form_choice = st.selectbox("Select an option:", ("Login", "Sign Up"))
 
@@ -83,8 +94,6 @@ def main():
         login()
     elif form_choice == "Sign Up":
         signup()
-    # elif st.session_state.authentication_status:
-    #     logout()
 
 
 if __name__ == "__main__":

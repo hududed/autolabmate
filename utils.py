@@ -30,7 +30,7 @@ PG_PASS = os.getenv("PG_PASS")
 DATABASE_URL = (
     f"postgresql://postgres:{PG_PASS}@db.zugnayzgayyoveqcmtcd.supabase.co:5432/postgres"
 )
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, echo=True)
 inspector = inspect(engine)
 
 
@@ -189,24 +189,90 @@ def save_and_upload_results(metadata, batch_number=1):
     )
 
 
-def create_table(table_name):
+def create_experiments_table() -> None:
+    # Create the profiles table if it doesn't exist
+    create_table_stmt = """
+    CREATE TABLE IF NOT EXISTS experiments (
+        user_id UUID PRIMARY KEY REFERENCES auth.users,
+        table_name TEXT,
+        csv_dict JSONB
+    );
+    """
+    with engine.connect() as conn:
+        query = text(create_table_stmt)
+        conn.execute(query)
+        conn.commit()
+        conn.close()
+
+
+def enable_rls(table_name: str):
     table_name = table_name.lower()
-    # Create new table
+    # Enable RLS
     with engine.connect() as conn:
         query = text(
-            f"CREATE TABLE IF NOT EXISTS {table_name} (id UUID NOT NULL DEFAULT uuid_generate_v4(), PRIMARY KEY (id));"
+            f"""
+            ALTER TABLE {table_name} ENABLE ROW LEVEL SECURITY;
+            """
         )
         conn.execute(query)
-        st.write(f'Table "{table_name}" created in database')
+        conn.commit()
+        print(f"RLS for table {table_name} created in database")
+        conn.close()
 
 
-def insert_data(table_name, data):
+def create_policy(table_name: str):
     table_name = table_name.lower()
-    # Insert data into table
+    # Enable RLS
     with engine.connect() as conn:
-        df = pd.read_csv(data)
-        df.to_sql(table_name, conn, if_exists="replace", index=False)
-        st.write(f'{data.name} inserted into table "{table_name}"')
+        query = text(
+            f"""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1
+                    FROM pg_policies
+                    WHERE schemaname = 'public'
+                    AND tablename = '{table_name}'
+                    AND policyname = 'User CRUD own tables only'
+                ) THEN
+                    CREATE POLICY "User CRUD own tables only"
+                    ON public.{table_name}
+                    FOR ALL
+                    TO authenticated
+                    USING (
+                        auth.uid() = user_id
+                    )
+                    WITH CHECK (
+                        auth.uid() = user_id
+                    );
+                END IF;
+            END
+            $$;
+            """
+        )
+        conn.execute(query)
+        conn.commit()
+        print(f"Created policy for table {table_name}.")
+        conn.close()
+
+
+def insert_data(table_name, file, user_id):
+    table_name = table_name.lower()
+    # Convert the uploaded CSV file into a DataFrame
+    df = pd.read_csv(file)
+    # Convert the DataFrame into a JSON string
+    json_str = df.to_json(orient="records")
+    # Connect to the database
+    with engine.connect() as conn:
+        # Prepare the INSERT INTO statement
+        query = f"INSERT INTO experiments (user_id, table_name, csv_dict) VALUES (:user_id, :table_name, :csv_dict)"
+        # Insert data into the table
+        conn.execute(
+            text(query),
+            {"user_id": user_id, "table_name": table_name, "csv_dict": json_str},
+        )
+        conn.commit()
+    st.write(f'Data "{table_name}" inserted into Experiments table')
 
 
 def retrieve_bucket_files(bucket_name):

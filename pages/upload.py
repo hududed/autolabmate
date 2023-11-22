@@ -1,7 +1,10 @@
 import streamlit as st
-from utils import create_table, insert_data, upload_local_to_bucket, save_to_local
+from utils import (
+    insert_data,
+    upload_local_to_bucket,
+    save_to_local,
+)
 from streamlit_extras.switch_page_button import switch_page
-from st_pages import hide_pages
 from time import sleep
 import pandas as pd
 
@@ -28,8 +31,10 @@ def main():
                 and table_name != ""
                 and confirm_upload
             ):
-                create_table(table_name)
-                insert_data(table_name, file)
+                st.session_state.table_name = table_name
+
+                insert_data(table_name, file, st.session_state.user_id)
+
                 bucket_name = "test-bucket"
                 file.seek(0)  # Reset the file pointer to the beginning
                 df = pd.read_csv(file)
@@ -37,10 +42,10 @@ def main():
                 save_to_local(bucket_name, table_name, output_file_name, df)
                 upload_local_to_bucket(bucket_name, table_name, file_extension=".csv")
                 st.write("Time for some preprocessing: switching to `Clean`.")
-                st.session_state.table_name = table_name
-                sleep(2)
-                # Switch to the clean page
-                switch_page("clean")
+
+        sleep(2)
+        # Switch to the clean page
+        switch_page("clean")
 
 
 if __name__ == "__main__":
