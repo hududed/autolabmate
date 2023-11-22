@@ -193,7 +193,9 @@ def create_experiments_table() -> None:
     # Create the profiles table if it doesn't exist
     create_table_stmt = """
     CREATE TABLE IF NOT EXISTS experiments (
-        user_id UUID PRIMARY KEY REFERENCES auth.users,
+        timestamp TIMESTAMPTZ DEFAULT NOW(),
+        id SERIAL PRIMARY KEY,
+        user_id UUID REFERENCES auth.users,
         table_name TEXT,
         csv_dict JSONB
     );

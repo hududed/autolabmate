@@ -43,9 +43,9 @@ def main():
                 upload_local_to_bucket(bucket_name, table_name, file_extension=".csv")
                 st.write("Time for some preprocessing: switching to `Clean`.")
 
-        sleep(2)
-        # Switch to the clean page
-        switch_page("clean")
+                sleep(2)
+                # Switch to the clean page
+                switch_page("clean")
 
 
 if __name__ == "__main__":
