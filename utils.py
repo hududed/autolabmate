@@ -1,8 +1,8 @@
 import streamlit as st
 import supabase
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text, inspect
-import os
+from sqlalchemy import create_engine, text, inspect, MetaData, Table
+import os, re
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -189,6 +189,41 @@ def save_and_upload_results(metadata, batch_number=1):
     )
 
 
+def get_table_names(user_id):
+    # Prepare the SELECT statement
+    query = text("SELECT DISTINCT table_name FROM experiments WHERE user_id = :user_id")
+
+    # Connect to the database
+    with engine.connect() as conn:
+        # Execute the SELECT statement
+        result = conn.execute(query, {"user_id": user_id})
+        conn.commit()
+        conn.close()
+
+    # Load the result into a DataFrame
+    df = pd.DataFrame(result.fetchall(), columns=result.keys())
+    return df["table_name"].tolist()
+
+
+def get_latest_row(user_id, table_name):
+    # Prepare the SELECT statement
+    query = text(
+        "SELECT csv_dict FROM experiments WHERE user_id = :user_id AND table_name = :table_name ORDER BY timestamp DESC LIMIT 1"
+    )
+
+    # Connect to the database
+    with engine.connect() as conn:
+        # Execute the SELECT statement
+        result = conn.execute(query, {"user_id": user_id, "table_name": table_name})
+        latest_row = result.fetchone()[0]
+        conn.commit()
+        conn.close()
+
+    # Load the result into a DataFrame
+    df = pd.DataFrame(latest_row)
+    return df
+
+
 def create_experiments_table() -> None:
     # Create the profiles table if it doesn't exist
     create_table_stmt = """
@@ -258,10 +293,30 @@ def create_policy(table_name: str):
         conn.close()
 
 
-def insert_data(table_name, file, user_id):
+def drop_column_from_table(table_name, column_name):
+    # TODO: Archive. not needed after RLS is enabled
+    metadata = MetaData()
+    db_table = Table(table_name, metadata, autoload_with=engine)
+
+    # Check if the column exists
+    if column_name in db_table.c:
+        # Drop the column
+        with engine.connect() as connection:
+            db_table._columns.remove(db_table.c[column_name])
+        st.write(f"Dropped column {column_name} from table {table_name}")
+    else:
+        st.write(f'Column "{column_name}" does not exist in table "{table_name}"')
+
+
+def sanitize_column_names(table):
+    # Sanitize column names
+    table.columns = [re.sub("[^0-9a-zA-Z_]", "", col) for col in table.columns]
+    table.columns = ["col_" + col if col[0].isdigit() else col for col in table.columns]
+    return table
+
+
+def insert_data(table_name: str, df: pd.DataFrame, user_id: str) -> None:
     table_name = table_name.lower()
-    # Convert the uploaded CSV file into a DataFrame
-    df = pd.read_csv(file)
     # Convert the DataFrame into a JSON string
     json_str = df.to_json(orient="records")
     # Connect to the database
@@ -274,7 +329,7 @@ def insert_data(table_name, file, user_id):
             {"user_id": user_id, "table_name": table_name, "csv_dict": json_str},
         )
         conn.commit()
-    st.write(f'Data "{table_name}" inserted into Experiments table')
+    st.write(f'Data "{table_name}" inserted into Experiments table at {datetime.now()}')
 
 
 def retrieve_bucket_files(bucket_name):
