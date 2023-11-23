@@ -421,7 +421,6 @@ def plot_pairplot(df):
         y = gaussian_kde(df_numeric[variable])(x)
         y_values.append(y)
         indices = np.where(y > 1e-6)[0]  # Get the indices where y > 1e-12
-        print(x[indices[0]], x[indices[-1]])
         if len(indices) > 0:
             lower_limit = x[indices[0]]  # Get the first x value where y > 1e-12
             upper_limit = x[indices[-1]]  # Get the last x value where y > 1e-12
@@ -429,7 +428,6 @@ def plot_pairplot(df):
             lower_limit = df_numeric[variable].min()
             upper_limit = df_numeric[variable].max()
         x_limits.append((lower_limit, upper_limit))
-    print(x_limits)
 
     # Add scatter plots for each pair of variables and KDE plots on the diagonal
     for i in range(len(variables)):
@@ -479,7 +477,7 @@ def plot_pairplot(df):
     st.plotly_chart(fig)
 
 
-def plot_pdp(df):
+def plot_pdp_old(df):
     """
     Plot a partial dependence graph for the specified features.
 
@@ -509,6 +507,82 @@ def plot_pdp(df):
 
     display.figure_.suptitle("1-way numerical PDP using random forest", fontsize=16)
     st.pyplot(plt)
+
+
+def plot_pdp(df):
+    """
+    Plot a partial dependence graph for the specified features.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame containing the data.
+    """
+    # Define the model
+    model = RandomForestRegressor()
+
+    # Separate the features and the target
+    X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
+    y = df.iloc[:, -1]
+
+    # Fit the model
+    model.fit(X, y)
+
+    # Create a subplot for each feature
+    fig = make_subplots(rows=1, cols=len(X.columns))
+
+    # Add a scatter plot for each feature
+    for i, feature in enumerate(X.columns):
+        # Compute the partial dependencies
+        pdp_results = partial_dependence(model, X, features=[i], kind="both")
+        pdp_values = pdp_results["average"][0]
+        ice_values = pdp_results["individual"][0]
+
+        # Add PDP line
+        fig.add_trace(
+            go.Scatter(
+                x=pdp_results["values"][0],
+                y=pdp_values,
+                mode="lines",
+                name="Average",
+                line=dict(color="orange", width=4, dash="dash"),
+                legendgroup="Average",
+                hoverinfo="skip",
+                showlegend=i == 0,
+            ),
+            row=1,
+            col=i + 1,
+        )
+
+        # Add ICE lines
+        for j, ice_line in enumerate(ice_values):
+            fig.add_trace(
+                go.Scatter(
+                    x=pdp_results["values"][0],
+                    y=ice_line,
+                    mode="lines",
+                    name="ICE"
+                    if i == 0 and j == 0
+                    else None,  # to prevent duplicate legend entries
+                    line=dict(color="gray", width=0.5),
+                    legendgroup="ICE",
+                    hoverinfo="skip",  # to prevent cluttering hover information
+                    showlegend=i == 0 and j == 0,
+                ),
+                row=1,
+                col=i + 1,
+            )
+
+        # Set x-axis title
+        fig.update_xaxes(title_text=feature, row=1, col=i + 1)
+
+    # Update the layout
+    fig.update_layout(
+        height=200 * len(X.columns),
+        title_text="1-way numerical PDP and ICE using Random Forest Boosting",
+        legend_title_text="Line Type",
+    )
+
+    # Display the plot
+    st.plotly_chart(fig)
 
 
 # add a 2-way interaction pdp plot, this function will only be called once user chooses which two parameters they want from a streamlit multi-box
