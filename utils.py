@@ -7,6 +7,9 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from scipy.stats import gaussian_kde
 import altair as alt
 from typing import Dict, Any, Tuple
 from pathlib import Path
@@ -210,19 +213,22 @@ def get_table_names(user_id):
 def get_latest_row(user_id, table_name):
     # Prepare the SELECT statement
     query = text(
-        "SELECT csv_dict FROM experiments WHERE user_id = :user_id AND table_name = :table_name ORDER BY timestamp DESC LIMIT 1"
+        "SELECT csv_dict, columns_order FROM experiments WHERE user_id = :user_id AND table_name = :table_name ORDER BY timestamp DESC LIMIT 1"
     )
 
     # Connect to the database
     with engine.connect() as conn:
         # Execute the SELECT statement
-        result = conn.execute(query, {"user_id": user_id, "table_name": table_name})
-        latest_row = result.fetchone()[0]
+        csv_dict, columns_order = conn.execute(
+            query, {"user_id": user_id, "table_name": table_name}
+        ).fetchone()
         conn.commit()
         conn.close()
 
     # Load the result into a DataFrame
-    df = pd.DataFrame(latest_row)
+    df = pd.DataFrame(csv_dict)
+    # Reorder the columns according to the stored order
+    df = df[columns_order]
     return df
 
 
@@ -234,7 +240,8 @@ def create_experiments_table() -> None:
         id SERIAL PRIMARY KEY,
         user_id UUID REFERENCES auth.users,
         table_name TEXT,
-        csv_dict JSONB
+        csv_dict JSONB,
+        columns_order JSON
     );
     """
     with engine.connect() as conn:
@@ -319,16 +326,23 @@ def sanitize_column_names(table):
 
 def insert_data(table_name: str, df: pd.DataFrame, user_id: str) -> None:
     table_name = table_name.lower()
-    # Convert the DataFrame into a JSON string
-    json_str = df.to_json(orient="records")
+    # Convert the DataFrame into a dictionary and then into a JSON string
+    json_str = json.dumps(df.to_dict(orient="records"))
+    # Store the order of the columns
+    columns_order = json.dumps(list(df.columns))
     # Connect to the database
     with engine.connect() as conn:
         # Prepare the INSERT INTO statement
-        query = f"INSERT INTO experiments (user_id, table_name, csv_dict) VALUES (:user_id, :table_name, :csv_dict)"
+        query = f"INSERT INTO experiments (user_id, table_name, csv_dict, columns_order) VALUES (:user_id, :table_name, :csv_dict, :columns_order)"
         # Insert data into the table
         conn.execute(
             text(query),
-            {"user_id": user_id, "table_name": table_name, "csv_dict": json_str},
+            {
+                "user_id": user_id,
+                "table_name": table_name,
+                "csv_dict": json_str,
+                "columns_order": columns_order,
+            },
         )
         conn.commit()
     st.write(f'Data "{table_name}" inserted into Experiments table at {datetime.now()}')
@@ -378,12 +392,91 @@ def plot_output(df, col2):
         col2.altair_chart(chart)
 
 
-def plot_pairplot(df):
+def plot_pairplot_old(df):
     sns.set_theme(context="talk")
     pairplot_fig = sns.pairplot(df, diag_kind="kde")
     plt.suptitle("Pairplot of the DataFrame", size=20, y=1.02)
 
     st.pyplot(pairplot_fig)
+
+
+def plot_pairplot(df):
+    # Select only numeric columns
+    df_numeric = df.select_dtypes(include=[np.number])
+    variables = df_numeric.columns
+
+    # Create a subplot with as many rows and columns as there are variables in the DataFrame
+    fig = make_subplots(rows=len(variables), cols=len(variables))
+
+    # Calculate x-axis limits based on KDE plots
+    x_limits = []
+    x_values, y_values = [], []
+    for variable in variables:
+        x = np.linspace(
+            -df_numeric[variable].max(),  # Start from a negative value
+            df_numeric[variable].max() * 5,
+            20000,
+        )
+        x_values.append(x)
+        y = gaussian_kde(df_numeric[variable])(x)
+        y_values.append(y)
+        indices = np.where(y > 1e-6)[0]  # Get the indices where y > 1e-12
+        print(x[indices[0]], x[indices[-1]])
+        if len(indices) > 0:
+            lower_limit = x[indices[0]]  # Get the first x value where y > 1e-12
+            upper_limit = x[indices[-1]]  # Get the last x value where y > 1e-12
+        else:
+            lower_limit = df_numeric[variable].min()
+            upper_limit = df_numeric[variable].max()
+        x_limits.append((lower_limit, upper_limit))
+    print(x_limits)
+
+    # Add scatter plots for each pair of variables and KDE plots on the diagonal
+    for i in range(len(variables)):
+        for j in range(len(variables)):
+            lower_limit, upper_limit = x_limits[j]
+
+            if i == j:
+                # Add a line plot for the KDE
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_values[j], y=y_values[j], mode="lines", showlegend=False
+                    ),
+                    row=i + 1,
+                    col=j + 1,
+                )
+            else:
+                # Add a scatter plot
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_numeric[variables[j]],
+                        y=df_numeric[variables[i]],
+                        mode="markers",
+                        showlegend=False,
+                    ),
+                    row=i + 1,
+                    col=j + 1,
+                )
+                # Compute the x-axis range for scatter plots
+                lower_limit, upper_limit = x_limits[j]
+
+            # Set the x-axis title only for the bottom row
+            title_text = variables[j] if i == len(variables) - 1 else ""
+            # Update the x-axis range
+            fig.update_xaxes(
+                title_text=title_text,
+                row=i + 1,
+                col=j + 1,
+                range=[lower_limit, upper_limit],
+            )
+
+    # Set y-axis titles
+    for i, variable in enumerate(variables, start=1):
+        fig.update_yaxes(title_text=variable, row=i, col=1)
+
+    fig.update_layout(title="Pairplot of the DataFrame", title_x=0.4)
+
+    st.plotly_chart(fig)
 
 
 def plot_pdp(df):
@@ -478,12 +571,13 @@ def plot_interaction_pdp(
         st.pyplot(plt)
 
 
-def show_dashboard(table_name):
-    df = query_table(table_name)
+def show_dashboard(df: pd.DataFrame):
+    # df = query_table(table_name)
     df_styled = highlight_max(df)
     col1, col2 = st.columns(2)
     col1.dataframe(df_styled)
-    plot_output(df, col2)
+    # plot_output(df, col2)
+    # plot_pairplot_old(df)
     plot_pairplot(df)
     plot_pdp(df)
 
