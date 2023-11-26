@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, text, inspect, MetaData, Table
 import os, re
 import pandas as pd
 import numpy as np
+from numpy.random import RandomState
 import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.graph_objects as go
@@ -16,11 +17,14 @@ from pathlib import Path
 import json
 from datetime import datetime
 import rpy2.robjects as ro
+import shap
 
 from sklearn.inspection import partial_dependence
 from sklearn.inspection import PartialDependenceDisplay
 from sklearn.ensemble import RandomForestRegressor
 
+SEED = 42
+rng = RandomState(SEED)
 
 load_dotenv()
 # Load Supabase credentials from .env file
@@ -485,7 +489,7 @@ def plot_pdp_old(df):
     df (pd.DataFrame): The DataFrame containing the data.
     """
     # Define the model
-    model = RandomForestRegressor()
+    model = RandomForestRegressor(random_state=rng)
 
     # Separate the features and the target
     X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
@@ -494,8 +498,11 @@ def plot_pdp_old(df):
     # Fit the model
     model.fit(X, y)
 
+    # Add a small random noise to the feature values
+    X_noise = X + np.random.normal(0, 0.01, size=X.shape)
+
     # Compute the partial dependencies
-    pdp_results = partial_dependence(model, X, features=X.columns)
+    pdp_results = partial_dependence(model, X_noise, features=X.columns)
 
     # Plot the partial dependence
     display = PartialDependenceDisplay.from_estimator(
@@ -509,22 +516,15 @@ def plot_pdp_old(df):
     st.pyplot(plt)
 
 
-def plot_pdp(df):
+def plot_pdp(df, model):
     """
     Plot a partial dependence graph for the specified features.
 
     Parameters:
     df (pd.DataFrame): The DataFrame containing the data.
     """
-    # Define the model
-    model = RandomForestRegressor()
-
     # Separate the features and the target
     X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
-    y = df.iloc[:, -1]
-
-    # Fit the model
-    model.fit(X, y)
 
     # Create a subplot for each feature
     fig = make_subplots(rows=1, cols=len(X.columns))
@@ -585,9 +585,8 @@ def plot_pdp(df):
     st.plotly_chart(fig)
 
 
-# add a 2-way interaction pdp plot, this function will only be called once user chooses which two parameters they want from a streamlit multi-box
-def plot_interaction_pdp(
-    df: pd.DataFrame, features_list: list[Tuple[str, str]], overlay: bool = None
+def plot_interaction_pdp_old(
+    df: pd.DataFrame, features_list: list[Tuple[str, str]], model, overlay: bool = None
 ):
     """
     Plot a 2-way interaction PDP for each pair of features in the list.
@@ -597,15 +596,8 @@ def plot_interaction_pdp(
     features_list (list): The list of pairs of features to plot.
     overlay (bool): Whether to overlay the actual feature pair points.
     """
-    # Define the model
-    model = RandomForestRegressor()
-
     # Separate the features and the target
     X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
-    y = df.iloc[:, -1]
-
-    # Fit the model
-    model.fit(X, y)
 
     for features in features_list:
         # Unpack the features tuple
@@ -625,10 +617,7 @@ def plot_interaction_pdp(
 
         # Compute the interaction PDP
         display = PartialDependenceDisplay.from_estimator(
-            model,
-            X,
-            [features],
-            kind="average",
+            model, X, [features], kind="average", random_state=rng
         )
 
         # Overlay the actual feature pair points if overlay is True
@@ -645,7 +634,147 @@ def plot_interaction_pdp(
         st.pyplot(plt)
 
 
-def show_dashboard(df: pd.DataFrame):
+def plot_interaction_pdp(
+    df: pd.DataFrame, features_list: list[Tuple[str, str]], overlay: bool = None
+):
+    """
+    Plot a 2-way interaction PDP for each pair of features in the list.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame containing the data.
+    features_list (list): The list of pairs of features to plot.
+    overlay (bool): Whether to overlay the actual feature pair points.
+    """
+    # Define the model
+    model = RandomForestRegressor(random_state=rng)
+
+    # Separate the features and the target
+    X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
+    y = df.iloc[:, -1]
+
+    # Fit the model
+    model.fit(X, y)
+
+    X_noise = X + np.random.normal(0, 0.01, size=X.shape)
+
+    for features in features_list:
+        # Unpack the features tuple
+        feature1, feature2 = features
+
+        # Check if the selected features exist in the DataFrame
+        if not {feature1, feature2}.issubset(set(X.columns)):
+            print(f"The selected features {features} must exist in the DataFrame.")
+            continue
+
+        # Check if the selected features are numeric
+        if not np.issubdtype(df[feature1].dtype, np.number) or not np.issubdtype(
+            df[feature2].dtype, np.number
+        ):
+            print(f"The selected features {features} must be numeric.")
+            continue
+
+        feature_indices = [X.columns.get_loc(feature) for feature in features]
+        print(feature_indices)
+
+        # Compute the interaction PDP
+        pdp_results = partial_dependence(
+            model, X_noise, feature_indices, kind="average"
+        )
+        # print(f"! {pdp_results}")
+        avg_preds = pdp_results["average"]
+        feature_values = pdp_results["values"]
+        # print(f"normal: {avg_preds[0]}")
+        # print(f"[::-1] {avg_preds[0][::-1]}")
+        # print(f"[f for] {[x[::-1] for x in avg_preds[0]]}")
+        # print(f"!!! {feature_values[0]}")
+
+        for i, j in zip(feature_values[0], feature_values[1]):
+            print(i, j)
+
+        corr_x = np.corrcoef(feature_values[0], np.mean(avg_preds[0], axis=0))[0, 1]
+        # Calculate the correlation between feature_values[1] and the average of avg_preds[0]
+        corr_y = np.corrcoef(feature_values[1], np.mean(avg_preds[0], axis=0))[0, 1]
+        # print(f"! Corr: {corr}")
+
+        # Create a 2D contour plot
+        fig = go.Figure(
+            data=[
+                go.Contour(
+                    x=feature_values[0],
+                    y=feature_values[1],
+                    z=[pred[::-1] for pred in avg_preds[0][::-1]]
+                    if corr_x < 0 or corr_y < 0
+                    else [pred for pred in avg_preds[0]],
+                    contours_coloring="fill",  # fill the contour lines with colors
+                    line_width=0.5,  # line width
+                    colorscale="Viridis",  # choose a colorscale
+                )
+            ]
+        )
+
+        # Add scatter points if overlay is True
+        if overlay:
+            fig.add_trace(
+                go.Scatter(
+                    x=df[feature1],
+                    y=df[feature2],
+                    mode="markers",
+                    marker=dict(
+                        size=10,
+                        color="white",
+                        line=dict(width=2, color="rgba(0, 0, 0, .8)"),
+                    ),
+                    name="Actual data points",
+                    hovertemplate=(
+                        f"<b>{feature1}:</b> %{{x}}<br>"
+                        f"<b>{feature2}:</b> %{{y}}<br>"
+                        f"<b>Target:</b> %{{text}}<br>"
+                    ),
+                    text=y,
+                )
+            )
+
+        # Update plot layout
+        fig.update_layout(
+            xaxis_title=feature1,
+            yaxis_title=feature2,
+            autosize=False,
+            width=500,
+            height=500,
+            margin=dict(l=65, r=50, b=65, t=90),
+        )
+
+        # Display the plot in Streamlit
+        st.plotly_chart(fig)
+
+
+def feature_importance(df: pd.DataFrame, model):
+    """
+    Display feature importances.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame containing the data.
+    model: The trained model.
+    """
+    print(f"!!!! {rng}")
+    # Separate the features and the target
+    X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
+
+    # Get feature importances
+    importances = model.feature_importances_
+
+    # Create a Plotly figure
+    fig = go.Figure()
+
+    # Add a bar for each feature
+    for i, importance in enumerate(importances):
+        fig.add_trace(go.Bar(x=[importance], y=[X.columns[i]], orientation="h"))
+
+    # Display the plot in Streamlit
+    st.plotly_chart(fig)
+
+
+def show_dashboard(df: pd.DataFrame, model):
     # df = query_table(table_name)
     df_styled = highlight_max(df)
     col1, col2 = st.columns(2)
@@ -653,11 +782,32 @@ def show_dashboard(df: pd.DataFrame):
     # plot_output(df, col2)
     # plot_pairplot_old(df)
     plot_pairplot(df)
-    plot_pdp(df)
+    plot_pdp(df, model)
 
 
-def show_interaction_pdp(df, pair_param: list[Tuple[str, str]], overlay: bool = None):
-    plot_interaction_pdp(df, pair_param, overlay)
+def show_interaction_pdp(
+    df, pair_param: list[Tuple[str, str]], model, overlay: bool = None
+):
+    plot_interaction_pdp_old(df, pair_param, model, overlay)
+    # plot_interaction_pdp(df, pair_param, overlay)
+
+
+def train_model(df: pd.DataFrame, rng: int = rng):
+    """
+    Train a RandomForestRegressor model.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame containing the data.
+    rng (int): The random seed.
+
+    Returns:
+    model: The trained model.
+    """
+    model = RandomForestRegressor(random_state=rng)
+    X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
+    y = df.iloc[:, -1]
+    model.fit(X, y)
+    return model
 
 
 def get_user_inputs(table):
@@ -826,18 +976,16 @@ def replace_value_with_nan(df: pd.DataFrame, value=-2147483648) -> pd.DataFrame:
     return df
 
 
-def get_features(table_name):
+def get_features(df: pd.DataFrame) -> list[str]:
     """
     Get a list of features i.e., all columns except the last column.
 
     Parameters:
-    table_name (str): The name of the table.
+    df (pd.DataFrame): The DataFrame.
 
     Returns:
     list: The list of features.
     """
-    df = pd.read_sql_table(table_name, engine)
-
     # Return all columns except the last one
     features = df.columns.tolist()[:-1]
     print(features)
