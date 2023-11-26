@@ -15,7 +15,6 @@ from utils import (
 import pandas as pd
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
-from st_pages import hide_pages
 
 st.title("Update Experiment")
 
@@ -297,11 +296,6 @@ def main():
                     batch_number,
                 )
 
-                # # TODO: the uploaded data is inserted as a row into table experiments as done in upload.py
-                # st.session_state.new_data.to_sql(
-                #     selected_table, engine, if_exists="replace", index=False
-                # )
-                # TODO: the uploaded data is inserted as a row into table experiments as done in upload.py
                 try:
                     insert_data(selected_table, st.session_state.new_data, user_id)
 
@@ -312,7 +306,6 @@ def main():
                     st.write(f"Error uploading data: {e}")
 
                 st.dataframe(df)
-                # st.write(f"Table {table_name} has been updated.")
                 st.session_state.update_clicked = False
                 st.session_state.button_start_ml = False
 
