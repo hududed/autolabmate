@@ -1,1 +1,7 @@
 r-base
+r-cran-mlr3mbo
+r-cran-mlr3
+r-cran-mlr3learners
+r-cran-bbotk
+r-cran-data.table
+r-cran-tibble
