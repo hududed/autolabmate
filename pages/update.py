@@ -1,7 +1,5 @@
 import streamlit as st
 from utils import (
-    engine,
-    inspector,
     validate_inputs,
     save_and_upload_results,
     load_metadata,
@@ -10,6 +8,9 @@ from utils import (
     upload_local_to_bucket,
     save_metadata,
     replace_value_with_nan,
+    get_table_names,
+    get_latest_row,
+    insert_data,
 )
 import pandas as pd
 import rpy2.robjects as ro
@@ -27,33 +28,43 @@ def main():
     if "button_start_ml" not in st.session_state or st.session_state.button_start_ml:
         st.session_state.button_start_ml = False
 
-    # choose table in supabase via streamlit dropdown
-    table_names = inspector.get_table_names()
-    if table_names:
-        default_table = (
-            st.session_state.table_name
-            if "table_name" in st.session_state
-            else table_names[0]
-        )
-        table_name = st.selectbox(
-            "Select a table", table_names, index=table_names.index(default_table)
-        )
-        # Load the selected table
-        query = f"SELECT * FROM {table_name};"
-        table = pd.read_sql_query(query, engine)
+    user_id = st.session_state.user_id
+    table_names = get_table_names(user_id)
+    if not table_names:
+        st.write("No tables found.")
+        return
 
+    default_table = (
+        st.session_state.table_name
+        if "table_name" in st.session_state
+        and st.session_state.table_name in table_names
+        else table_names[0]
+    )
+    selected_table = st.selectbox(
+        "Select a table", table_names, index=table_names.index(default_table)
+    )
+    if selected_table:
         st.write("Loading data from previous batch: ")
-        st.dataframe(table)
+        df = get_latest_row(user_id, selected_table)
+        st.dataframe(df)
 
         # Query user for batch number with st.number_input and save as batch_number
         batch_number = st.number_input(
             "Enter batch number", min_value=2, value=2, step=1
         )
+        try:
+            # Try to load the metadata
+            metadata = load_metadata(user_id, selected_table, batch_number - 1)
+        except FileNotFoundError:
+            # If a FileNotFoundError is raised, display a message and return
+            st.write(
+                f"No metadata found for table {selected_table}, and previous batch {batch_number - 1}."
+            )
+            return
 
-        metadata = load_metadata(table_name, batch_number - 1)
-
-        st.write("Loading metadata from previous batch: ")
-        st.write(metadata)
+        # st.write("Loading metadata from previous batch: ")
+        with st.expander("Show metadata from previous batch", expanded=False):
+            st.write(metadata)
 
         bucket_name = metadata["bucket_name"]
         parameter_ranges = metadata["parameter_ranges"]
@@ -61,7 +72,7 @@ def main():
         # User validates
         uploaded_file = st.file_uploader("Upload new data", type=["csv"])
         if st.button("Validate"):
-            validation_errors = validate_inputs(table, parameter_ranges)
+            validation_errors = validate_inputs(df, parameter_ranges)
 
             # Display validation errors or metadata
             if validation_errors:
@@ -110,7 +121,7 @@ def main():
                     # load_archive must be modified to load the latest metadata-*.json 
                     load_archive <- function(metadata) {
                         # Get a list of all *.rds files in the bucket
-                        files = list.files(path = paste0(metadata$bucket_name, "/", metadata$table_name, "/", metadata$batch_number), pattern = "*.rds", full.names = TRUE)
+                        files = list.files(path = paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", metadata$batch_number), pattern = "*.rds", full.names = TRUE)
 
                         # Load the acqf-, acqopt-, and archive- files
                         acqf = load_file(files, "acqf-")
@@ -128,7 +139,7 @@ def main():
                         new_batch_number = as.integer(metadata$batch_number) + 1
 
                         # Define the directory path
-                        dir_path = paste0(metadata$bucket_name, "/", metadata$table_name, "/", new_batch_number)
+                        dir_path = paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", new_batch_number)
                         
                         # Create the directory if it doesn't exist
                         if (!dir.exists(dir_path)) {
@@ -269,20 +280,36 @@ def main():
                 # Replace -2147483648 with np.nan if -2147483648 exists in the DataFrame
                 replace_value_with_nan(df)
 
-                save_metadata(metadata, table_name, batch_number)
+                save_metadata(metadata, user_id, selected_table, batch_number)
                 st.write("Saving metadata to local file")
 
-                upload_local_to_bucket(bucket_name, table_name, batch_number)
+                upload_local_to_bucket(
+                    bucket_name, user_id, selected_table, batch_number
+                )
 
                 output_file_name = f"{batch_number}-data.csv"
                 save_to_local(
-                    bucket_name, table_name, output_file_name, df, batch_number
+                    bucket_name,
+                    user_id,
+                    selected_table,
+                    output_file_name,
+                    df,
+                    batch_number,
                 )
 
-                # TODO: the uploaded data is inserted into the table table_name once results are saved and uploaded
-                st.session_state.new_data.to_sql(
-                    table_name, engine, if_exists="replace", index=False
-                )
+                # # TODO: the uploaded data is inserted as a row into table experiments as done in upload.py
+                # st.session_state.new_data.to_sql(
+                #     selected_table, engine, if_exists="replace", index=False
+                # )
+                # TODO: the uploaded data is inserted as a row into table experiments as done in upload.py
+                try:
+                    insert_data(selected_table, st.session_state.new_data, user_id)
+
+                    st.write(
+                        "Data uploaded successfully! Head to `dashboard` to see your data!"
+                    )
+                except Exception as e:
+                    st.write(f"Error uploading data: {e}")
 
                 st.dataframe(df)
                 # st.write(f"Table {table_name} has been updated.")
@@ -293,7 +320,7 @@ def main():
                     "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"
                 )
                 st.write(
-                    f"Files downloaded to local directory: /{bucket_name}/{table_name}/{batch_number}"
+                    f"Files downloaded to local directory: /{bucket_name}/{user_id}/{selected_table}/{batch_number}"
                 )
                 st.write(
                     "Run the proposed batch of experiments and proceed to `update` the model."

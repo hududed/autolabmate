@@ -83,7 +83,14 @@ def upload_to_bucket(
             raise e
 
 
-def save_to_local(bucket_name, user_id, table_name, file_name, df, batch_number=1):
+def save_to_local(
+    bucket_name: str,
+    user_id: str,
+    table_name: str,
+    file_name: str,
+    df: pd.DataFrame,
+    batch_number: int = 1,
+):
     table_name = table_name.lower()
     new_file_name = f"{bucket_name}/{user_id}/{table_name}/{batch_number}/{file_name}"
     print(new_file_name)
@@ -101,7 +108,11 @@ def save_to_local(bucket_name, user_id, table_name, file_name, df, batch_number=
 
 
 def save_metadata(
-    metadata, user_id, table_name, batch_number=1, bucket_name="test-bucket"
+    metadata: Dict[str, Any],
+    user_id: str,
+    table_name: str,
+    batch_number: int = 1,
+    bucket_name: str = "test-bucket",
 ):
     """
     Saves metadata to an in-memory file.
@@ -124,7 +135,10 @@ def save_metadata(
 
 
 def load_metadata(
-    table_name, batch_number=1, bucket_name="test-bucket"
+    user_id: str,
+    table_name: str,
+    batch_number: int = 1,
+    bucket_name: str = "test-bucket",
 ) -> Dict[str, Any]:
     """
     Loads metadata from an in-memory file.
@@ -137,7 +151,9 @@ def load_metadata(
         dict: The loaded metadata.
     """
     # Load the JSON string from the in-memory file
-    with open(f"{bucket_name}/{table_name}/{batch_number}/metadata.json", "r") as f:
+    with open(
+        f"{bucket_name}/{user_id}/{table_name}/{batch_number}/metadata.json", "r"
+    ) as f:
         json_metadata = f.read()
 
     # Convert the JSON string to a dictionary
@@ -147,7 +163,11 @@ def load_metadata(
 
 
 def upload_local_to_bucket(
-    bucket_name, user_id, table_name, batch_number=1, file_extension=".rds"
+    bucket_name: str,
+    user_id: str,
+    table_name: str,
+    batch_number: int = 1,
+    file_extension: str = ".rds",
 ):
     # Extract file name from file path
     base_path = Path(f"{bucket_name}/{user_id}/{table_name}/{batch_number}")
@@ -882,22 +902,22 @@ def get_user_inputs(df: pd.DataFrame):
     )
 
 
-def validate_inputs(table, parameter_ranges):
+def validate_inputs(df: pd.DataFrame, parameter_ranges: Dict[str, Any]):
     validation_errors = []
 
     # Validate numeric parameters
     for column, range_values in parameter_ranges.items():
-        if np.issubdtype(table[column].dtype, np.number):
+        if np.issubdtype(df[column].dtype, np.number):
             min_value, max_value = range_values
-            if not min_value <= table[column].max() <= max_value:
+            if not min_value <= df[column].max() <= max_value:
                 validation_errors.append(
                     f"Values for {column} are not within the specified range."
                 )
 
     # Validate string parameters
     for column, categories in parameter_ranges.items():
-        if np.issubdtype(table[column].dtype, object):
-            unique_values = table[column].unique()
+        if np.issubdtype(df[column].dtype, object):
+            unique_values = df[column].unique()
             if not set(unique_values).issubset(set(categories)):
                 validation_errors.append(
                     f"Unique values for {column} are not within the specified categories."
