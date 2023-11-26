@@ -84,7 +84,7 @@ def main():
 
     show_pages([Page("app.py", "home")])
 
-    print(f" !!! {os.environ.get("R_HOME", "Undefined")}")
+    print(f' !!! {os.environ.get("R_HOME", "Undefined")}')
 
     # TODO: add subprocess to run custom R script install.R to install R packages mlr3mbo, mlr3, mlr3learners, data.table, tibble, bbotk, R.utils
     try:
