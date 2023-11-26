@@ -3,6 +3,7 @@ from components.authenticate import supabase_client
 from st_pages import show_pages, Page
 from streamlit_extras.switch_page_button import switch_page
 from time import sleep
+import subprocess
 from utils import (
     enable_rls,
     create_policy,
@@ -81,6 +82,15 @@ def main():
         st.session_state.authentication_status = False
 
     show_pages([Page("app.py", "home")])
+
+    # TODO: add subprocess to run custom R script install.R to install R packages mlr3mbo, mlr3, mlr3learners, data.table, tibble, bbotk, R.utils
+    try:
+        subprocess.run(["Rscript", "install.R"], check=True)
+        print("R packages installed successfully!")
+    except subprocess.CalledProcessError as e:
+        print(f"Error installing R packages: {e}")
+
+    # TODO: add subprocess to run custom R script install.R to install R packages mlr3mbo, mlr3, mlr3learners, data.table, tibble, bbotk, R.utils
 
     create_experiments_table()
     enable_rls("experiments")
