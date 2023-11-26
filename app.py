@@ -85,7 +85,7 @@ def main():
 
     # TODO: add subprocess to run custom R script install.R to install R packages mlr3mbo, mlr3, mlr3learners, data.table, tibble, bbotk, R.utils
     try:
-        subprocess.run(["Rscript", "install.R"], check=True)
+        subprocess.run(["sudo", "Rscript", "install.R"], check=True)
         print("R packages installed successfully!")
     except subprocess.CalledProcessError as e:
         print(f"Error installing R packages: {e}")
