@@ -1,7 +1,6 @@
 import streamlit as st
 from utils import (
     engine,
-    inspector,
     get_user_inputs,
     validate_inputs,
     display_dictionary,
@@ -11,11 +10,12 @@ from utils import (
     upload_local_to_bucket,
     save_to_local,
     replace_value_with_nan,
+    get_table_names,
+    get_latest_row,
 )
 import pandas as pd
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
-from st_pages import hide_pages
 
 st.title("Propose Experiment")
 
@@ -29,20 +29,24 @@ def main():
         st.session_state.button_start_ml = False
     # choose table in supabase via streamlit dropdown
     # inspector = inspect(engine)
-    table_names = inspector.get_table_names()
-    if table_names:
-        default_table = (
-            st.session_state.table_name
-            if "table_name" in st.session_state
-            else table_names[0]
-        )
-        table_name = st.selectbox(
-            "Select a table", table_names, index=table_names.index(default_table)
-        )
-        # Load the selected table
-        query = f"SELECT * FROM {table_name};"
-        table = pd.read_sql_query(query, engine)
 
+    user_id = st.session_state.user_id
+    table_names = get_table_names(user_id)
+    if not table_names:
+        st.write("No tables found.")
+        return
+
+    default_table = (
+        st.session_state.table_name
+        if "table_name" in st.session_state
+        and st.session_state.table_name in table_names
+        else table_names[0]
+    )
+    selected_table = st.selectbox(
+        "Select a table", table_names, index=table_names.index(default_table)
+    )
+    if selected_table:
+        df = get_latest_row(user_id, selected_table)
         (
             batch_number,
             optimization_type,
@@ -52,11 +56,11 @@ def main():
             parameter_info,
             parameter_ranges,
             direction,
-        ) = get_user_inputs(table)
+        ) = get_user_inputs(df)
 
         # Add validate button
         if st.button("Validate"):
-            validation_errors = validate_inputs(table, parameter_ranges)
+            validation_errors = validate_inputs(df, parameter_ranges)
 
             # Display validation errors or metadata
             if validation_errors:
@@ -66,7 +70,7 @@ def main():
                 st.write("Validation passed.")
                 st.session_state.metadata = display_dictionary(
                     batch_number,
-                    table_name,
+                    selected_table,
                     optimization_type,
                     output_column_names,
                     num_parameters,
@@ -74,6 +78,7 @@ def main():
                     parameter_info,
                     parameter_ranges,
                     direction,
+                    user_id,
                 )
 
         # Add Start ML button
@@ -99,7 +104,7 @@ def main():
                 timestamp = format(Sys.time(), "%Y%m%d%H%M%S")
 
                 # Define the directory path
-                dir_path = paste0(metadata$bucket_name, "/", metadata$table_name, "/", metadata$batch_number)
+                dir_path = paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", metadata$batch_number)
                 
                 # Create the directory if it doesn't exist
                 if (!dir.exists(dir_path)) {
@@ -255,7 +260,7 @@ def main():
 
             converter = ro.default_converter + pandas2ri.converter
             with converter.context():
-                r_data = ro.conversion.get_conversion().py2rpy(table)
+                r_data = ro.conversion.get_conversion().py2rpy(df)
                 r_metadata = py_dict_to_r_list(st.session_state.metadata)
 
                 # Call the R function
@@ -270,16 +275,25 @@ def main():
                 # Replace -2147483648 with np.nan if -2147483648 exists in the DataFrame
                 replace_value_with_nan(df)
 
-                save_metadata(st.session_state.metadata, table_name, batch_number)
+                save_metadata(
+                    st.session_state.metadata, user_id, selected_table, batch_number
+                )
 
                 bucket_name = st.session_state.metadata["bucket_name"]
                 batch_number = st.session_state.metadata["batch_number"]
 
-                upload_local_to_bucket(bucket_name, table_name, batch_number)
+                upload_local_to_bucket(
+                    bucket_name, user_id, selected_table, batch_number
+                )
 
                 output_file_name = f"{batch_number}-data.csv"
                 save_to_local(
-                    bucket_name, table_name, output_file_name, df, batch_number
+                    bucket_name,
+                    user_id,
+                    selected_table,
+                    output_file_name,
+                    df,
+                    batch_number,
                 )
 
                 # TODO: NaN appears as min largest value
@@ -295,7 +309,7 @@ def main():
                     "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"
                 )
                 st.write(
-                    f"Files downloaded to local directory: /{bucket_name}/{table_name}/{batch_number}"
+                    f"Files downloaded to local directory: /{bucket_name}/{user_id}/{selected_table}/{batch_number}"
                 )
                 st.write(
                     "Run the proposed batch of experiments and proceed to `update` the model."

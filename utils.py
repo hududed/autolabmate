@@ -100,12 +100,15 @@ def save_to_local(bucket_name, user_id, table_name, file_name, df, batch_number=
         raise e
 
 
-def save_metadata(metadata, table_name, batch_number=1, bucket_name="test-bucket"):
+def save_metadata(
+    metadata, user_id, table_name, batch_number=1, bucket_name="test-bucket"
+):
     """
     Saves metadata to an in-memory file.
 
     Args:
         metadata (dict): The metadata to save.
+        user_id (str): The user ID.
         table_name (str): The name of the table.
         batch_number (int): The batch number. Defaults to 1.
         bucket_name (str): The name of the bucket. Defaults to 'test-bucket'.
@@ -114,7 +117,9 @@ def save_metadata(metadata, table_name, batch_number=1, bucket_name="test-bucket
     json_metadata = json.dumps(metadata)
 
     # Save the JSON string to an in-memory file
-    with open(f"{bucket_name}/{table_name}/{batch_number}/metadata.json", "w") as f:
+    with open(
+        f"{bucket_name}/{user_id}/{table_name}/{batch_number}/metadata.json", "w"
+    ) as f:
         f.write(json_metadata)
 
 
@@ -191,6 +196,7 @@ def save_and_upload_results(metadata, batch_number=1):
     # Upload the metadata to the bucket
     upload_to_bucket(
         metadata["bucket_name"],
+        metadata["user_id"],
         metadata["table_name"],
         file_name,
         metadata_content,
@@ -810,7 +816,7 @@ def train_model(df: pd.DataFrame, rng: int = rng):
     return model
 
 
-def get_user_inputs(table):
+def get_user_inputs(df: pd.DataFrame):
     # user input batch number through number_input, default to 1
     batch_number = st.number_input("Enter batch number", min_value=1, value=1, step=1)
 
@@ -818,26 +824,26 @@ def get_user_inputs(table):
     optimization_type = st.selectbox("Select optimization type", ["single", "multi"])
 
     direction = st.selectbox("Select optimization direction", ["minimize", "maximize"])
-
+    print(df)
     # Get output column names
     if optimization_type == "single":
-        output_column_names = [table.columns[-1]]
+        output_column_names = [df.columns[-1]]
     elif optimization_type == "multi":
-        output_column_names = table.columns[-2:]
+        output_column_names = df.columns[-2:]
 
     # Get number of parameters
-    num_parameters = len(table.columns) - len(output_column_names)
+    num_parameters = len(df.columns) - len(output_column_names)
 
     # Get number of random lines
     num_random_lines = st.number_input(
         "Enter the number of random lines",
         min_value=1,
-        max_value=len(table),
-        value=len(table),
+        max_value=len(df),
+        value=len(df),
     )
 
     # Get parameter info
-    parameter_info = table.dtypes[: -len(output_column_names)].to_dict()
+    parameter_info = df.dtypes[: -len(output_column_names)].to_dict()
     # Define a mapping from pandas dtypes to your desired types
     dtype_mapping = {"int64": "integer", "float64": "float", "O": "object"}
 
@@ -848,19 +854,19 @@ def get_user_inputs(table):
 
     # Get parameter ranges
     parameter_ranges = {}
-    for column in table.columns[: -len(output_column_names)]:
-        if np.issubdtype(table[column].dtype, np.number):
+    for column in df.columns[: -len(output_column_names)]:
+        if np.issubdtype(df[column].dtype, np.number):
             min_value = st.number_input(
-                f"Enter the min value for {column}", value=table[column].min()
+                f"Enter the min value for {column}", value=df[column].min()
             )
             max_value = st.number_input(
-                f"Enter the max value for {column}", value=table[column].max()
+                f"Enter the max value for {column}", value=df[column].max()
             )
             parameter_ranges[column] = (min_value, max_value)
-        elif np.issubdtype(table[column].dtype, object):
+        elif np.issubdtype(df[column].dtype, object):
             categories = st.text_input(
                 f"Enter the categories for {column}",
-                value=", ".join(table[column].unique()),
+                value=", ".join(df[column].unique()),
             )
             parameter_ranges[column] = categories.split(", ")
 
@@ -910,6 +916,7 @@ def display_dictionary(
     parameter_info,
     parameter_ranges,
     direction,
+    user_id,
     bucket_name: str = "test-bucket",
 ) -> Dict[str, Any]:
     metadata = {
@@ -926,8 +933,13 @@ def display_dictionary(
         "acquisition_function": "ei",
         "direction": direction,
         "bucket_name": bucket_name,
+        "user_id": user_id,
     }
-    st.write(metadata)
+    display_metadata = {
+        k: v for k, v in metadata.items() if k != "user_id" and k != "bucket_name"
+    }
+    with st.expander("Show metadata", expanded=False):
+        st.write(display_metadata)
     return metadata
 
 
