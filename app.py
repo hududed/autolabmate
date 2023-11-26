@@ -84,7 +84,12 @@ def main():
 
     show_pages([Page("app.py", "home")])
 
-    print(f' !!! {os.environ.get("R_HOME", "Undefined")}')
+    r_home = os.environ.get("R_HOME", "Undefined")
+    if r_home is not None:
+        # List all subdirectories in R_HOME
+        for root, dirs, files in os.walk(r_home):
+            for dir in dirs:
+                print(os.path.join(root, dir))
 
     # TODO: add subprocess to run custom R script install.R to install R packages mlr3mbo, mlr3, mlr3learners, data.table, tibble, bbotk, R.utils
     try:
