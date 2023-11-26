@@ -17,7 +17,6 @@ from pathlib import Path
 import json
 from datetime import datetime
 import rpy2.robjects as ro
-import shap
 
 from sklearn.inspection import partial_dependence
 from sklearn.inspection import PartialDependenceDisplay

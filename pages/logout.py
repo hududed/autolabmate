@@ -1,10 +1,9 @@
 import streamlit as st
 from streamlit_extras.switch_page_button import (
     switch_page,
-)  # import the switch_page function
+)
 from components.authenticate import supabase_client
 from time import sleep
-from st_pages import hide_pages
 
 
 # Logout page
