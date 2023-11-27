@@ -88,10 +88,14 @@ def main():
             # Define the mlr3 R functions
             ro.r(
                 """
-            library(mlr3mbo)
-            library(mlr3)
-            library(mlr3learners)
-            library(bbotk)
+            lib_path <- "./lib/R/library"
+
+            # Load the packages from the specified library path
+            library("mlr3mbo", lib.loc = lib_path)
+            library("mlr3", lib.loc = lib_path)
+            library("mlr3learners", lib.loc = lib_path)
+            library("bbotk", lib.loc = lib_path)
+            
             library(data.table)
             library(tibble)
 
