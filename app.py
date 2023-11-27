@@ -92,12 +92,25 @@ def main():
                 print(os.path.join(root, dir))
 
     # TODO: add subprocess to run custom R script install.R to install R packages mlr3mbo, mlr3, mlr3learners, data.table, tibble, bbotk, R.utils
-    try:
-        subprocess.run(["Rscript", "install.R"], check=True)
-        print("R packages installed successfully!")
-    except subprocess.CalledProcessError as e:
-        print(f"Error installing R packages: {e}")
 
+    try:
+        process = subprocess.Popen(
+            ["Rscript", "install.R"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        stdout, stderr = process.communicate()
+
+        if process.returncode != 0:
+            print(f"Error installing R packages: {stderr}")
+        else:
+            print("R packages installed successfully!")
+    except Exception as e:
+        print(f"Error: {e}")
+
+    # process2 = subprocess.Popen(["Rscript", "plot.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    # result2 = process2.communicate()
     create_experiments_table()
     enable_rls("experiments")
     create_policy("experiments")
