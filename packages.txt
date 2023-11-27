@@ -1,3 +1,4 @@
 r-base
 r-base-dev
 r-cran-data.table
+r-cran-mlr3
