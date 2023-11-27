@@ -1,9 +1,9 @@
 # List of packages to install
-packages <- c("mlr3mbo", "mlr3", "mlr3learners", "bbotk", "R.utils")
+packages <- c("mlr3mbo", "mlr3", "mlr3learners")
 
 
 install_if_not_installed <- function(package) {
-  lib_path <- "/user/lib/R/site-library"
+  lib_path <- "/usr/lib/R/site-library"
   
   # Create the directory if it doesn't exist
   if (!dir.exists(lib_path)) {
