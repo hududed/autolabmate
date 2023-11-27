@@ -3,4 +3,3 @@ r-base-dev
 r-cran-data.table
 r-cran-tibble
 r-cran-r.utils
-r-cran-lgr
