@@ -2,5 +2,4 @@ r-base
 r-base-dev
 r-cran-data.table
 r-cran-tibble
-r-cran-bbotk
 r-cran-R.utils

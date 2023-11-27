@@ -1,5 +1,5 @@
 # List of packages to install
-packages <- c("mlr3mbo", "mlr3", "mlr3learners")
+packages <- c("mlr3mbo", "mlr3", "mlr3learners", "bbotk")
 
 
 install_if_not_installed <- function(package) {
