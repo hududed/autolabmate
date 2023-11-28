@@ -830,9 +830,10 @@ def train_model(df: pd.DataFrame, rng: int = rng):
     Returns:
     model: The trained model.
     """
-    model = RandomForestRegressor(random_state=rng)
+    df = df.dropna(subset=["target_variable"])
     X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
     y = df.iloc[:, -1]
+    model = RandomForestRegressor(random_state=rng)
     model.fit(X, y)
     return model
 
