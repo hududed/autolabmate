@@ -355,6 +355,7 @@ def sanitize_column_names(table):
 
 def insert_data(table_name: str, df: pd.DataFrame, user_id: str) -> None:
     table_name = table_name.lower()
+    df = df.where(pd.notnull(df), None)
     # Convert the DataFrame into a dictionary and then into a JSON string
     json_str = json.dumps(df.to_dict(orient="records"))
     # Store the order of the columns
