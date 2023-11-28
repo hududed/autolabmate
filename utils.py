@@ -15,6 +15,7 @@ import altair as alt
 from typing import Dict, Any, Tuple
 from pathlib import Path
 import json
+import simplejson
 from datetime import datetime
 import rpy2.robjects as ro
 
@@ -357,7 +358,7 @@ def insert_data(table_name: str, df: pd.DataFrame, user_id: str) -> None:
     table_name = table_name.lower()
     df = df.where(pd.notnull(df), None)
     # Convert the DataFrame into a dictionary and then into a JSON string
-    json_str = json.dumps(df.to_dict(orient="records"))
+    json_str = simplejson.dumps(df.to_dict(orient="records"), ignore_nan=True)
     # Store the order of the columns
     columns_order = json.dumps(list(df.columns))
     # Connect to the database
