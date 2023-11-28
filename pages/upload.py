@@ -44,11 +44,11 @@ def main():
             st.write(
                 "Column headers sanitized. The following table will be updated in the database."
             )
-            drop_column = st.selectbox(
+            drop_columns = st.multiselect(
                 "Select a column to drop before inserting into database",
-                ["None"] + list(df.columns),
+                list(df.columns),
             )
-            if drop_column != "None":
+            for drop_column in drop_columns:
                 # Drop the column from the dataframe
                 df = df.drop(columns=[drop_column])
                 st.write(f"Dropped column: {drop_column}")
