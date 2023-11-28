@@ -36,6 +36,7 @@ def main():
 
     if selected_table:
         df = get_latest_row(user_id, selected_table)
+        df = df.dropna()
         model = train_model(df)
         show_dashboard(df, model)
         feature_importance(df, model)
