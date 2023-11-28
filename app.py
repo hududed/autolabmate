@@ -84,35 +84,8 @@ def main():
 
     show_pages([Page("app.py", "home")])
 
-    r_home = os.environ.get("R_HOME", "Undefined")
-    packages = ["mlr3mbo", "mlr3", "mlr3learners", "bbotk"]
-    if r_home is not None:
-        # List all subdirectories in R_HOME
-        for root, dirs, files in os.walk(r_home):
-            for dir in dirs:
-                if dir in packages:
-                    print(os.path.join(root, dir))
+    # TODO: need to move to other cloud provider as streamlit cloud as r2u / r-cran-mlr3 is not supported
 
-    # TODO: add subprocess to run custom R script install.R to install R packages mlr3mbo, mlr3, mlr3learners, data.table, tibble, bbotk, R.utils
-
-    try:
-        process = subprocess.Popen(
-            ["Rscript", "install.R"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        stdout, stderr = process.communicate()
-
-        if process.returncode != 0:
-            print(f"Error installing R packages: {stderr}")
-        else:
-            print("R packages installed successfully!")
-    except Exception as e:
-        print(f"Error: {e}")
-
-    # process2 = subprocess.Popen(["Rscript", "plot.R"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    # result2 = process2.communicate()
     create_experiments_table()
     enable_rls("experiments")
     create_policy("experiments")

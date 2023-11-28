@@ -1,3 +1,5 @@
+# TODO: This wont work since it prohibitively reinstalls the packages everytime the page is loaded
+
 # List of packages to install
 packages <- c("mlr3mbo", "mlr3", "mlr3learners", "bbotk")
 
