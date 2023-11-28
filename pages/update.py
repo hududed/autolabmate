@@ -27,6 +27,8 @@ def main():
     if "button_start_ml" not in st.session_state or st.session_state.button_start_ml:
         st.session_state.button_start_ml = False
 
+    st.warning("This section is still under development.")
+
     user_id = st.session_state.user_id
     table_names = get_table_names(user_id)
     if not table_names:
