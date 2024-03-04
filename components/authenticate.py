@@ -3,17 +3,20 @@ import supabase
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text, inspect
 import streamlit as st
+
 load_dotenv()
 
 # Load Supabase credentials from .env file
-SUPA_URL = os.getenv('SUPABASE_URL')
-SUPA_KEY = os.getenv('SUPABASE_KEY')
+SUPA_URL = os.getenv("SUPABASE_URL")
+SUPA_KEY = os.getenv("SUPABASE_KEY")
 
 # Initialize Supabase client
 supabase_client = supabase.create_client(SUPA_URL, SUPA_KEY)
-PG_PASS = os.getenv('PG_PASS')
-DATABASE_URL = f'postgresql://postgres:{PG_PASS}@db.zugnayzgayyoveqcmtcd.supabase.co:5432/postgres'
+PG_PASS = os.getenv("PG_PASS")
+DATABASE_URL = f"postgresql://postgres.zugnayzgayyoveqcmtcd:{PG_PASS}@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
+# DATABASE_URL = f'postgresql://postgres:{PG_PASS}@db.zugnayzgayyoveqcmtcd.supabase.co:5432/postgres'
 engine = create_engine(DATABASE_URL)
+
 
 def initialise_st_state_vars():
     """
@@ -25,6 +28,7 @@ def initialise_st_state_vars():
 
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
+
 
 def set_st_state_vars(credentials):
     """
@@ -43,6 +47,7 @@ def login(credentials):
     # Login to existing account
     response = supabase_client.auth.sign_in_with_password(credentials)
     return response
+
 
 def get_user_tokens(credentials):
     """

@@ -18,6 +18,7 @@ import json
 import simplejson
 from datetime import datetime
 import rpy2.robjects as ro
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 from sklearn.inspection import partial_dependence
 from sklearn.inspection import PartialDependenceDisplay
@@ -34,9 +35,10 @@ supabase_key = os.getenv("SUPABASE_KEY")
 # Initialize Supabase client
 supabase_client = supabase.create_client(supabase_url, supabase_key)
 PG_PASS = os.getenv("PG_PASS")
-DATABASE_URL = (
-    f"postgresql://postgres:{PG_PASS}@db.zugnayzgayyoveqcmtcd.supabase.co:5432/postgres"
-)
+DATABASE_URL = f"postgresql://postgres.zugnayzgayyoveqcmtcd:{PG_PASS}@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
+# DATABASE_URL = (
+#     f"postgresql://postgres:{PG_PASS}@db.zugnayzgayyoveqcmtcd.supabase.co:5432/postgres"
+# )
 engine = create_engine(DATABASE_URL, echo=True)
 inspector = inspect(engine)
 
@@ -54,6 +56,7 @@ def login(credentials):
     return response
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def upload_to_bucket(
     bucket_name, user_id, table_name, file_name, file_content, batch_number=1
 ):
@@ -162,6 +165,7 @@ def load_metadata(
     return metadata
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
 def upload_local_to_bucket(
     bucket_name: str,
     user_id: str,
