@@ -1,7 +1,7 @@
 import streamlit as st
 from utils import (
     validate_inputs,
-    save_and_upload_results,
+    upload_metadata,
     load_metadata,
     py_dict_to_r_list,
     save_to_local,
@@ -98,6 +98,26 @@ def main():
                     library(tibble)
                     library(R.utils)
 
+
+                    round_to_nearest <- function(x, metadata) {
+                        to_nearest = as.numeric(metadata$to_nearest)
+                        if (is.data.table(x) || is.data.frame(x)) {
+                            x <- lapply(x, function(col) {
+                            if (is.numeric(col)) {
+                                return(round(col / to_nearest) * to_nearest)
+                            } else {
+                                return(col)
+                            }
+                            })
+                            x <- setDT(x) # Convert the list to a data.table
+                        } else if (is.numeric(x)) {
+                            x <- round(x / to_nearest) * to_nearest
+                        }  else {
+                            stop("x must be a data.table, data.frame, or numeric vector")
+                        }
+                        return(x)
+                    }
+
                     load_file <- function(files, pattern) {
                         # Check if there are files that match the pattern
                         matched_files = grep(pattern, files, value = TRUE)
@@ -153,11 +173,12 @@ def main():
                         saveRDS(acq_optimizer, paste0(dir_path, "/acqopt-", timestamp, ".rds"))
                     }
 
-                    update_and_optimize <- function(acq_function, acq_optimizer, tmp_archive, candidate_new, lie) {
+                    update_and_optimize <- function(acq_function, acq_optimizer, tmp_archive, candidate_new, lie, metadata) {
                         acq_function$surrogate$update()
                         acq_function$update()
                         tmp_archive$add_evals(xdt = candidate_new, xss_trafoed = transform_xdt_to_xss(candidate_new, tmp_archive$search_space), ydt = lie)
                         candidate_new = acq_optimizer$optimize()
+                        candidate_new = round_to_nearest(candidate_new, metadata)
                         return(candidate_new)
                     }
 
@@ -167,6 +188,7 @@ def main():
                         acq_function$surrogate$update()
                         acq_function$update()
                         candidate = acq_optimizer$optimize()
+                        candidate = round_to_nearest(candidate, metadata)
                         print(candidate)
                         tmp_archive = archive$clone(deep = TRUE)
                         acq_function$surrogate$archive = tmp_archive
@@ -179,10 +201,10 @@ def main():
                         }
                         candidate_new = candidate
                         for (i in seq_len(q)[-1L]) {
-                            candidate_new = update_and_optimize(acq_function, acq_optimizer, tmp_archive, candidate_new, lie)
+                            candidate_new = update_and_optimize(acq_function, acq_optimizer, tmp_archive, candidate_new, lie, metadata)
                             candidate = rbind(candidate, candidate_new)
                         }
-                        candidate_new = update_and_optimize(acq_function, acq_optimizer, tmp_archive, candidate_new, lie)
+                        candidate_new = update_and_optimize(acq_function, acq_optimizer, tmp_archive, candidate_new, lie, metadata)
                         # Iterate over each column in candidate
                         for (col in names(candidate_new)) {
                             # If the column is numeric, round and format it
@@ -273,7 +295,7 @@ def main():
 
                 metadata["batch_number"] = batch_number
 
-                save_and_upload_results(metadata, batch_number)
+                upload_metadata(metadata, batch_number)
 
                 # Convert R data frame to pandas data frame
                 df = ro.conversion.get_conversion().rpy2py(result)
@@ -296,6 +318,13 @@ def main():
                     output_file_name,
                     df,
                     batch_number,
+                )
+                upload_local_to_bucket(
+                    bucket_name,
+                    user_id,
+                    selected_table,
+                    batch_number,
+                    file_extension=".csv",
                 )
 
                 try:

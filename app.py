@@ -3,15 +3,13 @@ from components.authenticate import supabase_client
 from st_pages import show_pages, Page
 from streamlit_extras.switch_page_button import switch_page
 from time import sleep
-import os
-import subprocess
 from utils import (
     enable_rls,
     create_policy,
     create_experiments_table,
 )
 
-st.title("Welcome to Autolabmate!")
+st.title("Welcome to Autolabmate!!")
 
 
 # Login form

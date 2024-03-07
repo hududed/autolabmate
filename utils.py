@@ -207,7 +207,7 @@ def upload_local_to_bucket(
                 raise e
 
 
-def save_and_upload_results(metadata, batch_number=1):
+def upload_metadata(metadata, batch_number=1):
     # Convert the metadata dictionary to a JSON string and encode it to bytes
     metadata_content = json.dumps(metadata).encode()
 
@@ -215,14 +215,14 @@ def save_and_upload_results(metadata, batch_number=1):
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
     # Define the file name
-    file_name = f"metadata-{timestamp}.json"
+    metadata_file_name = f"metadata-{timestamp}.json"
 
     # Upload the metadata to the bucket
     upload_to_bucket(
         metadata["bucket_name"],
         metadata["user_id"],
         metadata["table_name"],
-        file_name,
+        metadata_file_name,
         metadata_content,
         batch_number,
     )
@@ -880,6 +880,10 @@ def get_user_inputs(df: pd.DataFrame):
 
     # Get parameter ranges
     parameter_ranges = {}
+    # Get to_nearest_value
+    to_nearest_value = st.number_input(
+        "Enter the value to round to", min_value=0.01, value=0.01, step=0.01
+    )
     for column in df.columns[: -len(output_column_names)]:
         if np.issubdtype(df[column].dtype, np.number):
             min_value = st.number_input(
@@ -905,6 +909,7 @@ def get_user_inputs(df: pd.DataFrame):
         parameter_info,
         parameter_ranges,
         direction,
+        to_nearest_value,
     )
 
 
@@ -943,6 +948,7 @@ def display_dictionary(
     parameter_ranges,
     direction,
     user_id,
+    to_nearest,
     bucket_name: str = "test-bucket",
 ) -> Dict[str, Any]:
     metadata = {
@@ -960,6 +966,7 @@ def display_dictionary(
         "direction": direction,
         "bucket_name": bucket_name,
         "user_id": user_id,
+        "to_nearest": to_nearest,
     }
     display_metadata = {
         k: v for k, v in metadata.items() if k != "user_id" and k != "bucket_name"

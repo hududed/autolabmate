@@ -44,14 +44,20 @@ def main():
             st.write(
                 "Column headers sanitized. The following table will be updated in the database."
             )
-            drop_columns = st.multiselect(
-                "Select a column to drop before inserting into database",
+            # Let the user select the X columns
+            X_columns = st.multiselect(
+                "Select the X columns",
                 list(df.columns),
             )
-            for drop_column in drop_columns:
-                # Drop the column from the dataframe
-                df = df.drop(columns=[drop_column])
-                st.write(f"Dropped column: {drop_column}")
+
+            # Let the user select the y columns
+            y_columns = st.multiselect(
+                "Select the y columns",
+                list(set(df.columns) - set(X_columns)),
+            )
+
+            # Rearrange the DataFrame
+            df = df[X_columns + y_columns]
 
             st.dataframe(df)
 
