@@ -69,11 +69,14 @@ def main():
 
         bucket_name = metadata["bucket_name"]
         parameter_ranges = metadata["parameter_ranges"]
+        output_column_names = metadata["output_column_names"]
 
         # User validates
         uploaded_file = st.file_uploader("Upload new data", type=["csv"])
         if st.button("Validate"):
-            validation_errors = validate_inputs(df, parameter_ranges)
+            validation_errors = validate_inputs(
+                df, parameter_ranges, output_column_names
+            )
 
             # Display validation errors or metadata
             if validation_errors:
@@ -83,7 +86,9 @@ def main():
             else:
                 st.write("Validation successful!")
                 if uploaded_file is not None:
-                    st.session_state.new_data = pd.read_csv(uploaded_file)
+                    st.session_state.new_data = pd.read_csv(
+                        uploaded_file, usecols=df.columns
+                    )
                     st.dataframe(st.session_state.new_data)
 
                     # TODO: data is then saved save_to_local with user input batch_number. path should be e.g. test-bucket/{table_name}/{batch_number}/*.csv
@@ -217,7 +222,7 @@ def main():
                         return(list(candidate, archive, acq_function))
                         }
                     experiment <- function(data, metadata) {
-                        set.seed(42)
+                        set.seed(metadata$seed)
                         result = load_archive(metadata)
                         full_data = as.data.table(data)
                         # print(data)

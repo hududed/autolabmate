@@ -43,6 +43,9 @@ def main():
     selected_table = st.selectbox(
         "Select a table", table_names, index=table_names.index(default_table)
     )
+    # Add seed input
+    seed = st.number_input("Enter a seed", value=42, step=1)
+
     if selected_table:
         df = get_latest_row(user_id, selected_table)
         (
@@ -68,6 +71,7 @@ def main():
             else:
                 st.write("Validation passed.")
                 st.session_state.metadata = display_dictionary(
+                    seed,
                     batch_number,
                     selected_table,
                     optimization_type,
@@ -181,7 +185,7 @@ def main():
                 }
 
             experiment <- function(data, metadata) {
-                set.seed(42)
+                set.seed(metadata$seed)
                 data = as.data.table(data) # data.csv is queried `table`
 
                 # retrieve this from metadata parameter_ranges

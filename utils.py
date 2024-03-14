@@ -913,8 +913,15 @@ def get_user_inputs(df: pd.DataFrame):
     )
 
 
-def validate_inputs(df: pd.DataFrame, parameter_ranges: Dict[str, Any]):
+def validate_inputs(
+    df: pd.DataFrame,
+    parameter_ranges: Dict[str, Any],
+    output_column_names: list[str] = None,
+):
     validation_errors = []
+
+    if output_column_names is not None:
+        df = df[list(parameter_ranges.keys()) + output_column_names]
 
     # Validate numeric parameters
     for column, range_values in parameter_ranges.items():
@@ -938,6 +945,7 @@ def validate_inputs(df: pd.DataFrame, parameter_ranges: Dict[str, Any]):
 
 
 def display_dictionary(
+    seed,
     batch_number,
     table_name,
     optimization_type,
@@ -952,6 +960,7 @@ def display_dictionary(
     bucket_name: str = "test-bucket",
 ) -> Dict[str, Any]:
     metadata = {
+        "seed": seed,
         "batch_number": batch_number,
         "table_name": table_name,
         "optimization_type": optimization_type,
