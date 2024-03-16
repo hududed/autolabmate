@@ -188,16 +188,22 @@ def main():
                     }
 
                     add_evals_to_archive <- function(archive, acq_function, acq_optimizer, data, q, metadata) {
-                        lie = data.table()
-                        liar = min
+                        lie <- data.table()
+                        liar <- min
                         acq_function$surrogate$update()
                         acq_function$update()
-                        candidate = acq_optimizer$optimize()
-                        candidate = round_to_nearest(candidate, metadata)
+                        candidate <- acq_optimizer$optimize()
+                        candidate <- round_to_nearest(candidate, metadata)
                         print(candidate)
                         tmp_archive = archive$clone(deep = TRUE)
                         acq_function$surrogate$archive = tmp_archive
-                        lie[, archive$cols_y := liar(archive$data[[archive$cols_y]])]
+
+                        # Apply the liar function to each column in archive$cols_y
+                        for (col_name in archive$cols_y) {
+                            lie[, (col_name) := liar(archive$data[[col_name]])]
+                        }
+
+                        # lie[, archive$cols_y := liar(archive$data[[archive$cols_y]])]
                         candidate_new = candidate
 
                         # Check if lie is a data.table
@@ -206,10 +212,14 @@ def main():
                         }
                         candidate_new = candidate
                         for (i in seq_len(q)[-1L]) {
-                            candidate_new = update_and_optimize(acq_function, acq_optimizer, tmp_archive, candidate_new, lie, metadata)
+                            candidate_new = update_and_optimize(acq_function, acq_optimizer,
+                                                                tmp_archive, candidate_new, 
+                                                                lie, metadata)
                             candidate = rbind(candidate, candidate_new)
                         }
-                        candidate_new = update_and_optimize(acq_function, acq_optimizer, tmp_archive, candidate_new, lie, metadata)
+                        candidate_new = update_and_optimize(acq_function, acq_optimizer, 
+                                                            tmp_archive, candidate_new, 
+                                                            lie, metadata)
                         # Iterate over each column in candidate
                         for (col in names(candidate_new)) {
                             # If the column is numeric, round and format it
@@ -223,18 +233,19 @@ def main():
                         }
                     experiment <- function(data, metadata) {
                         set.seed(metadata$seed)
-                        result = load_archive(metadata)
-                        full_data = as.data.table(data)
+                        result <- load_archive(metadata)
+                        full_data <- as.data.table(data)
                         # print(data)
                         data <- tail(full_data, n=metadata$num_random_lines)
                         print(data)
                             
-                        archive = result[[1]]
-                        acq_function = result[[2]]
-                        acq_optimizer = result[[3]]
+                        archive <- result[[1]]
+                        acq_function <- result[[2]]
+                        acq_optimizer <- result[[3]]
                         
                         # Check if metadata$output_column_names is NULL or empty
-                        if (is.null(metadata$output_column_names) || length(metadata$output_column_names) == 0) {
+                        if (is.null(metadata$output_column_names) ||
+                            length(metadata$output_column_names) == 0) {
                             stop("metadata$output_column_names is NULL or empty")
                         }
 
@@ -248,19 +259,29 @@ def main():
 
 
                         # Now you can safely call the add_evals method
-                        archive$add_evals(xdt = data[, names(metadata$parameter_info), with=FALSE], ydt = data[, metadata$output_column_names, with=FALSE])
+                        archive$add_evals(xdt = data[, names(metadata$parameter_info), with=FALSE], 
+                                          ydt = data[, metadata$output_column_names, with=FALSE])
                         print("Model archive so far: ")
                         print(archive)
                         q = metadata$num_random_lines
-                        result = add_evals_to_archive(archive, acq_function, acq_optimizer, data, q, metadata)
+                        result = add_evals_to_archive(archive, acq_function, acq_optimizer,
+                                                      data, q, metadata)
 
-                        candidate = result[[1]]
-                        archive = result[[2]]
-                        acq_function = result[[3]]
+                        candidate <- result[[1]]
+                        archive <- result[[2]]
+                        acq_function <- result[[3]]
 
                         print(result)
 
-                        x2 <- candidate[, names(metadata$parameter_info), with=FALSE]
+                        # x2 <- candidate[, names(metadata$parameter_info), with=FALSE]
+                        # Check if all required columns exist in candidate
+                        if (all(names(metadata$parameter_info) %in% names(candidate))) {
+                            x2 <- candidate[, names(metadata$parameter_info), with=FALSE]
+                        } else {
+                            print("Error: One or more required columns do not exist in candidate.")
+                            return()
+                        }
+
                         print("New candidates: ")
                         print(x2)
                         print("New archive: ")

@@ -849,13 +849,30 @@ def get_user_inputs(df: pd.DataFrame):
     # Get optimization type
     optimization_type = st.selectbox("Select optimization type", ["single", "multi"])
 
-    direction = st.selectbox("Select optimization direction", ["minimize", "maximize"])
-    print(df)
     # Get output column names
     if optimization_type == "single":
         output_column_names = [df.columns[-1]]
+        directions = [
+            st.selectbox("Select optimization direction", ["minimize", "maximize"])
+        ]
     elif optimization_type == "multi":
-        output_column_names = df.columns[-2:]
+        output_column_names = df.columns[-2:].tolist()
+        directions = []
+        for column in output_column_names:
+            directions.append(
+                st.selectbox(
+                    f"Select optimization direction for {column}",
+                    ["minimize", "maximize"],
+                )
+            )
+
+    # direction = st.selectbox("Select optimization direction", ["minimize", "maximize"])
+    print(df)
+    # # Get output column names
+    # if optimization_type == "single":
+    #     output_column_names = [df.columns[-1]]
+    # elif optimization_type == "multi":
+    #     output_column_names = df.columns[-2:]
 
     # Get number of parameters
     num_parameters = len(df.columns) - len(output_column_names)
@@ -908,7 +925,7 @@ def get_user_inputs(df: pd.DataFrame):
         num_random_lines,
         parameter_info,
         parameter_ranges,
-        direction,
+        directions,
         to_nearest_value,
     )
 
@@ -972,7 +989,7 @@ def display_dictionary(
         "parameter_ranges": parameter_ranges,
         "learner": "regr.ranger",
         "acquisition_function": "ei",
-        "direction": direction,
+        "directions": direction,
         "bucket_name": bucket_name,
         "user_id": user_id,
         "to_nearest": to_nearest,

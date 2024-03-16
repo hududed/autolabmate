@@ -56,7 +56,7 @@ def main():
             num_random_lines,
             parameter_info,
             parameter_ranges,
-            direction,
+            directions,
             to_nearest,
         ) = get_user_inputs(df)
 
@@ -80,7 +80,7 @@ def main():
                     num_random_lines,
                     parameter_info,
                     parameter_ranges,
-                    direction,
+                    directions,
                     user_id,
                     to_nearest,
                 )
@@ -150,16 +150,22 @@ def main():
             }
 
             add_evals_to_archive <- function(archive, acq_function, acq_optimizer, data, q, metadata) {
-                lie = data.table()
-                liar = min
+                lie <- data.table()
+                liar <- min
                 acq_function$surrogate$update()
                 acq_function$update()
-                candidate = acq_optimizer$optimize()
-                candidate = round_to_nearest(candidate, metadata)
+                candidate <- acq_optimizer$optimize()
+                candidate <- round_to_nearest(candidate, metadata)
                 print(candidate)
                 tmp_archive = archive$clone(deep = TRUE)
                 acq_function$surrogate$archive = tmp_archive
-                lie[, archive$cols_y := liar(archive$data[[archive$cols_y]])]
+
+                # Apply the liar function to each column in archive$cols_y
+                for (col_name in archive$cols_y) {
+                    lie[, (col_name) := liar(archive$data[[col_name]])]
+                }
+
+                # lie[, archive$cols_y := liar(archive$data[[archive$cols_y]])]
                 candidate_new = candidate
 
                 # Check if lie is a data.table
@@ -168,10 +174,14 @@ def main():
                 }
                 candidate_new = candidate
                 for (i in seq_len(q)[-1L]) {
-                    candidate_new = update_and_optimize(acq_function, acq_optimizer, tmp_archive, candidate_new, lie, metadata)
+                    candidate_new = update_and_optimize(acq_function, acq_optimizer,
+                                                        tmp_archive, candidate_new, 
+                                                        lie, metadata)
                     candidate = rbind(candidate, candidate_new)
                 }
-                candidate_new = update_and_optimize(acq_function, acq_optimizer, tmp_archive, candidate_new, lie, metadata)
+                candidate_new = update_and_optimize(acq_function, acq_optimizer, 
+                                                    tmp_archive, candidate_new, 
+                                                    lie, metadata)
                 # Iterate over each column in candidate
                 for (col in names(candidate_new)) {
                     # If the column is numeric, round and format it
@@ -186,21 +196,22 @@ def main():
 
             experiment <- function(data, metadata) {
                 set.seed(metadata$seed)
-                data = as.data.table(data) # data.csv is queried `table`
+                data <- as.data.table(data) # data.csv is queried `table`
 
                 # retrieve this from metadata parameter_ranges
-                search_space = ParamSet$new(params = list())
+                search_space <- ParamSet$new(params = list())
                 # Loop through metadata$parameter_info
                 for (param_name in names(metadata$parameter_info)) {
-                    print(param_name)
-                    param_info = metadata$parameter_info[[param_name]]
-                    param_range = metadata$parameter_ranges[[param_name]]
+                    # print(paste("Parameter name: ", param_name))
+                    param_info <- metadata$parameter_info[[param_name]]
+                    param_range <- metadata$parameter_ranges[[param_name]]
 
-                    print(param_info)
-                    print(param_range)
+                    # print(paste("Param info:", param_info))
+                    # print(paste("Param range:", param_range))
 
                     # Check if param_info is 'object', if so, no need to convert to numeric
-                    if (param_info == 'object') {
+                    print(paste("Adding parameter to search_space with id: ", param_name))
+                    if (param_info == "object") {
                         search_space$add(ParamFct$new(id = param_name, levels = param_range))
                         next
                     }
@@ -209,10 +220,10 @@ def main():
                     param_range_split = strsplit(gsub("[()]", "", param_range), ",")[[1]]
 
                     # Convert the results to appropriate type
-                    if (param_info == 'integer') {
+                    if (param_info == "integer") {
                         lower = as.integer(param_range_split[1])
                         upper = as.integer(param_range_split[2])
-                    } else if (param_info == 'float') {
+                    } else if (param_info == "float") {
                         lower = as.numeric(param_range_split[1])
                         upper = as.numeric(param_range_split[2])
                     }
@@ -224,54 +235,102 @@ def main():
                     }
 
                     # Add the parameter to the search space
-                    if (param_info == 'float') {
+                    if (param_info == "float") {
                         # Check if metadata$to_nearest is numeric
                         if (is.numeric(as.numeric(metadata$to_nearest))) {
-                            values = seq(lower, upper, by = as.numeric(metadata$to_nearest))
-                            search_space$add(ParamDbl$new(id = param_name, lower = lower, upper = upper))
+                            values = seq(lower, upper, by=as.numeric(metadata$to_nearest))
+                            search_space$add(ParamDbl$new(id = param_name, 
+                                                          lower = lower, upper = upper))
                         } else {
-                            print(paste("metadata$to_nearest is not numeric for param_name:", param_name))
+                            print(paste("metadata$to_nearest is not numeric for 
+                                         param_name:", param_name))
                         }
-                    } else if (param_info == 'integer') {
-                        search_space$add(ParamInt$new(id = param_name, lower = lower, upper = upper))
+                    } else if (param_info == "integer") {
+                        search_space$add(ParamInt$new(id = param_name, 
+                                                      lower = lower, upper = upper))
                     }
                 }
                 # Initialize an empty ParamSet for the codomain
                 codomain = ParamSet$new(params = list())
 
                 # Loop through metadata$output_column_names
-                for (output_name in metadata$output_column_names) {
+                for (i in seq_along(metadata$output_column_names)) {
+                    output_name <- metadata$output_column_names[i]
+                    print(paste("Adding output to codomain with id: ", output_name))
+                    direction <- metadata$directions[i]
                     # Add the output to the codomain
-                    codomain$add(ParamDbl$new(id = output_name, tags = metadata$direction))
+                    codomain$add(ParamDbl$new(id = output_name, tags = direction))
                 }
+                # for (output_name in metadata$output_column_names) {
+                #     # Add the output to the codomain
+                #     codomain$add(ParamDbl$new(id = output_name, tags = metadata$direction))
+                # }
 
-                archive = Archive$new(search_space = search_space, codomain = codomain)
+                archive <- Archive$new(search_space = search_space, codomain = codomain)
+
+                # Print metadata$output_column_names
+                print(metadata$output_column_names)
+
+                # Print unique values of output2
+                print(unique(data$output2))
+                
+                # Convert output columns to doubles
+                output_data <- data.table(sapply(data[, metadata$output_column_names,
+                                                      with=FALSE], as.double))
 
                 # Use parameter_info in the subset operation
-                archive$add_evals(xdt = data[, names(metadata$parameter_info), with=FALSE], ydt = data[, metadata$output_column_names, with=FALSE])
+                archive$add_evals(xdt = data[, names(metadata$parameter_info), with=FALSE],
+                                  ydt = output_data)
             
 
                 print("Model archive so far: ")
                 print(archive)
-                surrogate = srlrn(lrn("regr.ranger"), archive = archive)
-                acq_function = acqf("ei", surrogate = surrogate)
-                acq_optimizer = acqo(opt("random_search", batch_size = 1000),
-                                    terminator = trm("evals", n_evals = 1000),
-                                    acq_function = acq_function)
-                q = as.integer(metadata$num_random_lines)
-                # print(q)
-                # print(acq_function)
-                # print(acq_optimizer)
-                # print(data)
-                result = add_evals_to_archive(archive, acq_function, acq_optimizer, data, q, metadata)
+                # Determine the number of objectives
+                num_objectives <- length(metadata$output_column_names)
 
-                candidate = result[[1]]
-                archive = result[[2]]
-                acq_function = result[[3]]
+                if (num_objectives == 1) {
+                    surrogate <- srlrn(lrn("regr.ranger"), archive = archive)
+                    acq_function <- acqf("ei", surrogate = surrogate)
+                } else {
+                    surrogate <- srlrn(list(default_rf(), default_rf()), archive = archive)
+                    acq_function <- acqf("ehvi", surrogate = surrogate)
+                }
+                # single or multi
+                acq_optimizer <- acqo(opt("random_search", batch_size = 1000),
+                                        terminator = trm("evals", n_evals = 1000),
+                                        acq_function = acq_function)
+
+                q <- as.integer(metadata$num_random_lines)
+                #   print(q)
+                #   print(acq_function)
+                #   print(acq_optimizer)
+                #   print(data)
+
+                result <- add_evals_to_archive(archive, acq_function,
+                                                acq_optimizer, data, q, metadata)
+
+                candidate <- result[[1]]
+                archive <- result[[2]]
+                acq_function <- result[[3]]
+                # surrogate = srlrn(lrn("regr.ranger"), archive = archive)
+                # acq_function = acqf("ei", surrogate = surrogate)
+                # acq_optimizer = acqo(opt("random_search", batch_size = 1000),
+                #                     terminator = trm("evals", n_evals = 1000),
+                #                     acq_function = acq_function)
+                # q = as.integer(metadata$num_random_lines)
+                # # print(q)
+                # # print(acq_function)
+                # # print(acq_optimizer)
+                # # print(data)
+                # result = add_evals_to_archive(archive, acq_function, acq_optimizer, data, q, metadata)
+
+                # candidate = result[[1]]
+                # archive = result[[2]]
+                # acq_function = result[[3]]
 
                 print(result)
 
-                x2 <- candidate[, names(metadata$parameter_info), with=FALSE]
+                x2 <- candidate[, names(metadata$parameter_info), with = FALSE]
                 print("New candidates: ")
                 print(x2)
                 print("New archive: ")
