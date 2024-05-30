@@ -244,7 +244,7 @@ def get_table_names(user_id):
     return df["table_name"].tolist()
 
 
-def get_latest_row(user_id, table_name):
+def get_latest_row(user_id, table_name) -> pd.DataFrame:
     # Prepare the SELECT statement
     query = text(
         "SELECT csv_dict, columns_order FROM experiments WHERE user_id = :user_id AND table_name = :table_name ORDER BY timestamp DESC LIMIT 1"
@@ -411,8 +411,47 @@ def query_table(table_name, pair_param=None):
     return df
 
 
-def highlight_max(df):
-    return df.style.highlight_max(subset=[df.columns[-1]])
+def highlight_max(df: pd.DataFrame, direction: str):
+    """
+    Highlight the maximum or minimum value in the last column of a DataFrame based on the specified direction.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame.
+    direction (str): Either "min" or "max".
+
+    Returns:
+    df: The DataFrame with the maximum or minimum value in the last column highlighted.
+    """
+    if direction == "max":
+        return df.style.highlight_max(subset=[df.columns[-1]])
+    else:
+        return df.style.highlight_min(subset=[df.columns[-1]])
+
+
+def highlight_max_multi(df: pd.DataFrame, directions: Dict[str, str]):
+    """
+    Highlight the maximum or minimum value in each column of a DataFrame based on the specified directions.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame.
+    directions (dict): A dictionary mapping column names to either "min" or "max".
+
+    Returns:
+    df: The DataFrame with the maximum or minimum values in each column highlighted.
+    """
+
+    def highlight(s):
+        is_max = directions[s.name] == "max"
+        return (
+            ["background-color: yellow" if v == s.max() else "" for v in s]
+            if is_max
+            else ["background-color: yellow" if v == s.min() else "" for v in s]
+        )
+
+    # Apply the highlight function only to the last two columns of the DataFrame
+    df_styler = df.style.apply(highlight, subset=df.columns[-2:])
+
+    return df_styler
 
 
 def plot_output(df, col2):
@@ -547,15 +586,18 @@ def plot_pdp_old(df):
     st.pyplot(plt)
 
 
-def plot_pdp(df, model):
+def plot_pdp(
+    df: pd.DataFrame, model: RandomForestRegressor, n_outputs: int, output_name: str
+):
     """
-    Plot a partial dependence graph for the specified features.
+    This function plots a partial dependence graph for each numerical feature in the given DataFrame.
 
     Parameters:
     df (pd.DataFrame): The DataFrame containing the data.
+    model: The trained model for which the partial dependence is calculated.
     """
     # Separate the features and the target
-    X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
+    X = df.select_dtypes(include=[np.number]).iloc[:, :-n_outputs]
 
     # Create a subplot for each feature
     fig = make_subplots(rows=1, cols=len(X.columns))
@@ -608,7 +650,7 @@ def plot_pdp(df, model):
     # Update the layout
     fig.update_layout(
         height=200 * len(X.columns),
-        title_text="1-way numerical PDP and ICE using Random Forest Boosting",
+        title_text=f"1-way numerical PDP and ICE for {output_name} using Random Forest",
         legend_title_text="Line Type",
     )
 
@@ -616,8 +658,13 @@ def plot_pdp(df, model):
     st.plotly_chart(fig)
 
 
-def plot_interaction_pdp_old(
-    df: pd.DataFrame, features_list: list[Tuple[str, str]], model, overlay: bool = None
+def plot_interaction_pdp(
+    df: pd.DataFrame,
+    features_list: list[Tuple[str, str]],
+    model: RandomForestRegressor,
+    output_name: str = "",  # TODO: dynamic for both single and multi
+    n_outputs: int = 1,
+    overlay: bool = None,
 ):
     """
     Plot a 2-way interaction PDP for each pair of features in the list.
@@ -628,7 +675,7 @@ def plot_interaction_pdp_old(
     overlay (bool): Whether to overlay the actual feature pair points.
     """
     # Separate the features and the target
-    X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
+    X = df.select_dtypes(include=[np.number]).iloc[:, :-n_outputs]
 
     for features in features_list:
         # Unpack the features tuple
@@ -657,7 +704,8 @@ def plot_interaction_pdp_old(
 
         # Plot the interaction PDP
         display.figure_.suptitle(
-            f"2-way PDP for {features} using random forest", fontsize=16
+            f"2-way PDP between {features} for {output_name} using random forest",
+            fontsize=16,
         )
         plt.show()
 
@@ -665,121 +713,7 @@ def plot_interaction_pdp_old(
         st.pyplot(plt)
 
 
-def plot_interaction_pdp(
-    df: pd.DataFrame, features_list: list[Tuple[str, str]], overlay: bool = None
-):
-    """
-    Plot a 2-way interaction PDP for each pair of features in the list.
-
-    Parameters:
-    df (pd.DataFrame): The DataFrame containing the data.
-    features_list (list): The list of pairs of features to plot.
-    overlay (bool): Whether to overlay the actual feature pair points.
-    """
-    # Define the model
-    model = RandomForestRegressor(random_state=rng)
-
-    # Separate the features and the target
-    X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
-    y = df.iloc[:, -1]
-
-    # Fit the model
-    model.fit(X, y)
-
-    X_noise = X + np.random.normal(0, 0.01, size=X.shape)
-
-    for features in features_list:
-        # Unpack the features tuple
-        feature1, feature2 = features
-
-        # Check if the selected features exist in the DataFrame
-        if not {feature1, feature2}.issubset(set(X.columns)):
-            print(f"The selected features {features} must exist in the DataFrame.")
-            continue
-
-        # Check if the selected features are numeric
-        if not np.issubdtype(df[feature1].dtype, np.number) or not np.issubdtype(
-            df[feature2].dtype, np.number
-        ):
-            print(f"The selected features {features} must be numeric.")
-            continue
-
-        feature_indices = [X.columns.get_loc(feature) for feature in features]
-        print(feature_indices)
-
-        # Compute the interaction PDP
-        pdp_results = partial_dependence(
-            model, X_noise, feature_indices, kind="average"
-        )
-        # print(f"! {pdp_results}")
-        avg_preds = pdp_results["average"]
-        feature_values = pdp_results["values"]
-        # print(f"normal: {avg_preds[0]}")
-        # print(f"[::-1] {avg_preds[0][::-1]}")
-        # print(f"[f for] {[x[::-1] for x in avg_preds[0]]}")
-        # print(f"!!! {feature_values[0]}")
-
-        for i, j in zip(feature_values[0], feature_values[1]):
-            print(i, j)
-
-        corr_x = np.corrcoef(feature_values[0], np.mean(avg_preds[0], axis=0))[0, 1]
-        # Calculate the correlation between feature_values[1] and the average of avg_preds[0]
-        corr_y = np.corrcoef(feature_values[1], np.mean(avg_preds[0], axis=0))[0, 1]
-        # print(f"! Corr: {corr}")
-
-        # Create a 2D contour plot
-        fig = go.Figure(
-            data=[
-                go.Contour(
-                    x=feature_values[0],
-                    y=feature_values[1],
-                    z=[pred[::-1] for pred in avg_preds[0][::-1]]
-                    if corr_x < 0 or corr_y < 0
-                    else [pred for pred in avg_preds[0]],
-                    contours_coloring="fill",  # fill the contour lines with colors
-                    line_width=0.5,  # line width
-                    colorscale="Viridis",  # choose a colorscale
-                )
-            ]
-        )
-
-        # Add scatter points if overlay is True
-        if overlay:
-            fig.add_trace(
-                go.Scatter(
-                    x=df[feature1],
-                    y=df[feature2],
-                    mode="markers",
-                    marker=dict(
-                        size=10,
-                        color="white",
-                        line=dict(width=2, color="rgba(0, 0, 0, .8)"),
-                    ),
-                    name="Actual data points",
-                    hovertemplate=(
-                        f"<b>{feature1}:</b> %{{x}}<br>"
-                        f"<b>{feature2}:</b> %{{y}}<br>"
-                        f"<b>Target:</b> %{{text}}<br>"
-                    ),
-                    text=y,
-                )
-            )
-
-        # Update plot layout
-        fig.update_layout(
-            xaxis_title=feature1,
-            yaxis_title=feature2,
-            autosize=False,
-            width=500,
-            height=500,
-            margin=dict(l=65, r=50, b=65, t=90),
-        )
-
-        # Display the plot in Streamlit
-        st.plotly_chart(fig)
-
-
-def feature_importance(df: pd.DataFrame, model):
+def feature_importance(df: pd.DataFrame, model: RandomForestRegressor):
     """
     Display feature importances.
 
@@ -787,7 +721,6 @@ def feature_importance(df: pd.DataFrame, model):
     df (pd.DataFrame): The DataFrame containing the data.
     model: The trained model.
     """
-    print(f"!!!! {rng}")
     # Separate the features and the target
     X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
 
@@ -801,26 +734,102 @@ def feature_importance(df: pd.DataFrame, model):
     for i, importance in enumerate(importances):
         fig.add_trace(go.Bar(x=[importance], y=[X.columns[i]], orientation="h"))
 
+    # Update the layout with a title
+    fig.update_layout(title_text="Feature importances")
     # Display the plot in Streamlit
     st.plotly_chart(fig)
 
 
-def show_dashboard(df: pd.DataFrame, model):
-    # df = query_table(table_name)
+def feature_importance_multi(
+    df: pd.DataFrame,
+    models: Tuple[RandomForestRegressor, RandomForestRegressor],
+    output_names: list[str],
+):
+    """
+    Display feature importances for multiple models.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame containing the data.
+    models: The trained models.
+    output_names (List[str]): The names of the outputs.
+    """
+    # Separate the features and the target
+    X = df.select_dtypes(include=[np.number]).iloc[:, :-2]
+
+    # For each model
+    for model, output_name in zip(models, output_names):
+        # Get feature importances
+        importances = model.feature_importances_
+
+        # Create a Plotly figure
+        fig = go.Figure()
+
+        # Add a bar for each feature
+        for i, importance in enumerate(importances):
+            fig.add_trace(go.Bar(x=[importance], y=[X.columns[i]], orientation="h"))
+
+        # Update the layout with a title
+        fig.update_layout(title_text=f"Feature importances for {output_name}")
+
+        # Display the plot in Streamlit
+        st.plotly_chart(fig)
+
+
+def show_dashboard(df: pd.DataFrame, model: RandomForestRegressor):
     df_styled = highlight_max(df)
-    col1, col2 = st.columns(2)
-    col1.dataframe(df_styled)
-    # plot_output(df, col2)
-    # plot_pairplot_old(df)
+    st.dataframe(df_styled)
     plot_pairplot(df)
     plot_pdp(df, model)
 
 
-def show_interaction_pdp(
-    df, pair_param: list[Tuple[str, str]], model, overlay: bool = None
+def show_dashboard_multi(
+    df: pd.DataFrame,
+    models: Tuple[RandomForestRegressor, RandomForestRegressor],
+    y_directions: Dict[str, str],
+    y_columns: list[str],
 ):
-    plot_interaction_pdp_old(df, pair_param, model, overlay)
-    # plot_interaction_pdp(df, pair_param, overlay)
+    """
+    Display a dashboard for multiple models.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame containing the data.
+    models: The trained models.
+    y_columns (list): The names of the output columns.
+    y_directions (dict): A dictionary mapping column names to either "min" or "max".
+    """
+    # Highlight the max or min value in each output column
+    df_styled = highlight_max_multi(df, y_directions)
+
+    st.dataframe(df_styled)
+
+    # Plot a pairplot for the output columns
+    plot_pairplot(df)
+
+    # For each model
+    for model, output_name in zip(models, y_columns):
+        # Plot a Partial Dependence Plot
+        plot_pdp(df, model, len(y_directions), output_name)
+
+
+def show_interaction_pdp(
+    df: pd.DataFrame,
+    pair_param: list[Tuple[str, str]],
+    model: RandomForestRegressor,
+    overlay: bool = None,
+):
+    plot_interaction_pdp(df, pair_param, model, overlay)
+
+
+def show_interaction_pdp_multi(
+    df: pd.DataFrame,
+    pair_param: list[Tuple[str, str]],
+    models: Tuple[RandomForestRegressor, RandomForestRegressor],
+    output_names: list[str],
+    overlay: bool = None,
+):
+    n_outputs = len(output_names)
+    for model, output_name in zip(models, output_names):
+        plot_interaction_pdp(df, pair_param, model, output_name, n_outputs, overlay)
 
 
 def train_model(df: pd.DataFrame, rng: int = rng):
@@ -840,6 +849,31 @@ def train_model(df: pd.DataFrame, rng: int = rng):
     model = RandomForestRegressor(random_state=rng)
     model.fit(X, y)
     return model
+
+
+def train_model_multi(df: pd.DataFrame, rng: int = rng):
+    """
+    Train two RandomForestRegressor models.
+
+    Parameters:
+    df (pd.DataFrame): The DataFrame containing the data.
+    rng (int): The random seed.
+
+    Returns:
+    models: The trained models.
+    """
+    df = df.dropna()
+    X = df.select_dtypes(include=[np.number]).iloc[:, :-2]
+    y1 = df.iloc[:, -2]
+    y2 = df.iloc[:, -1]
+
+    model1 = RandomForestRegressor(random_state=rng)
+    model1.fit(X, y1)
+
+    model2 = RandomForestRegressor(random_state=rng)
+    model2.fit(X, y2)
+
+    return model1, model2
 
 
 def get_user_inputs(df: pd.DataFrame):

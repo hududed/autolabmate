@@ -1,12 +1,15 @@
 import streamlit as st
 from utils import (
     show_dashboard,
+    show_dashboard_multi,
     show_interaction_pdp,
-    get_features,
+    show_interaction_pdp_multi,
     get_table_names,
     get_latest_row,
     train_model,
+    train_model_multi,
     feature_importance,
+    feature_importance_multi,
 )
 
 st.title("Dashboard")
@@ -37,12 +40,9 @@ def main():
     if selected_table:
         df = get_latest_row(user_id, selected_table)
         df = df.dropna()
-        model = train_model(df)
-        show_dashboard(df, model)
-        feature_importance(df, model)
 
-        # Create a list of features i.e., all columns except the target column
-        features = get_features(df)
+        # Get the first N columns based on the length of session X_columns
+        features = df.columns[: len(st.session_state.metadata["X_columns"])].tolist()
 
         # User input multibox select exactly 2 features to compare from the list of features
         selected_features = st.multiselect(
@@ -54,15 +54,34 @@ def main():
         # Check if exactly 2 features are selected
         if len(selected_features) != 2:
             st.error("Please select exactly 2 features.")
+
         else:
             # Once selected, the tuple of two features is added as pair_param
             pair_param = [tuple(selected_features)]
-            # df = query_table(table_name)
-            # print(df)
-            show_interaction_pdp(df, pair_param, model, overlay=True)
 
-    # else:
-    #     st.write("No tables found in the database.")
+            if len(st.session_state.metadata["y_columns"]) == 2:
+                models = train_model_multi(df)
+                show_dashboard_multi(
+                    df,
+                    models,
+                    st.session_state.metadata["y_directions"],
+                    st.session_state.metadata["y_columns"],
+                )
+                feature_importance_multi(
+                    df, models, st.session_state.metadata["y_columns"]
+                )
+                show_interaction_pdp_multi(
+                    df,
+                    pair_param,
+                    models,
+                    st.session_state.metadata["y_columns"],
+                    overlay=True,
+                )
+            else:
+                model = train_model(df)
+                show_dashboard(df, model)
+                feature_importance(df, model)
+                show_interaction_pdp(df, pair_param, model, overlay=True)
 
 
 if __name__ == "__main__":

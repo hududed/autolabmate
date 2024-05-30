@@ -55,6 +55,26 @@ def main():
                 "Select the y columns",
                 list(set(df.columns) - set(X_columns)),
             )
+            # Let the user select the optimization direction for each y column
+            y_directions = {}
+            for column in y_columns:
+                y_directions[column] = st.selectbox(
+                    f"Should {column} be optimized for min or max?",
+                    options=["min", "max"],
+                    key=column,
+                )
+
+            # Add y_directions to metadata
+            st.session_state.metadata["y_directions"] = y_directions
+
+            # Initialize metadata in session state if it doesn't exist
+            if "metadata" not in st.session_state:
+                st.session_state.metadata = {}
+
+            # Add table_name, X_columns, and y_columns to metadata
+            st.session_state.metadata["table_name"] = st.session_state.table_name
+            st.session_state.metadata["X_columns"] = X_columns
+            st.session_state.metadata["y_columns"] = y_columns
 
             # Rearrange the DataFrame
             df = df[X_columns + y_columns]
