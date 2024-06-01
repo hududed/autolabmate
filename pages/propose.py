@@ -143,45 +143,87 @@ def main():
             update_and_optimize <- function(acq_function, acq_optimizer, tmp_archive, candidate_new, lie, metadata) {
                 acq_function$surrogate$update()
                 acq_function$update()
-                tmp_archive$add_evals(xdt = candidate_new, xss_trafoed = transform_xdt_to_xss(candidate_new, tmp_archive$search_space), ydt = lie)
+                tmp_archive$add_evals(xdt = candidate_new,
+                                      xss_trafoed = transform_xdt_to_xss(candidate_new,
+                                                                         tmp_archive$search_space),
+                                      ydt = lie)
                 candidate_new = acq_optimizer$optimize()
                 candidate_new = round_to_nearest(candidate_new, metadata)
                 return(candidate_new)
             }
 
             add_evals_to_archive <- function(archive, acq_function, acq_optimizer, data, q, metadata) {
-                lie <- data.table()
-                liar <- min
+                # lie <- data.table()
+                # liar <- min
+                # Check inputs
+                if (!is.data.table(archive$data)) {
+                    stop("archive$data must be a data.table")
+                }
+
+                min_value <- min
                 acq_function$surrogate$update()
                 acq_function$update()
                 candidate <- acq_optimizer$optimize()
                 candidate <- round_to_nearest(candidate, metadata)
                 print(candidate)
+
                 tmp_archive = archive$clone(deep = TRUE)
                 acq_function$surrogate$archive = tmp_archive
 
+                min_values <- data.table()
+
                 # Apply the liar function to each column in archive$cols_y
                 for (col_name in archive$cols_y) {
-                    lie[, (col_name) := liar(archive$data[[col_name]])]
+                    min_values[, (col_name) := min_value(archive$data[[col_name]])]
                 }
 
-                # lie[, archive$cols_y := liar(archive$data[[archive$cols_y]])]
-                candidate_new = candidate
-
-                # Check if lie is a data.table
-                if (!is.data.table(lie)) {
-                    stop("lie is not a data.table")
-                }
                 candidate_new = candidate
                 for (i in seq_len(q)[-1L]) {
-                    candidate_new = update_and_optimize(acq_function, acq_optimizer,
-                                                        tmp_archive, candidate_new, 
-                                                        lie, metadata)
-                    candidate = rbind(candidate, candidate_new)
+                    
+                    # Predict y or y1 y2 for the new candidate
+                    prediction <- acq_function$surrogate$predict(candidate_new)
+
+                    col_names <- c(paste0(archive$cols_y[1], "_mean"), paste0(archive$cols_y[1], "_se"))
+                    if (length(archive$cols_y) > 1) {
+                        col_names <- c(col_names, paste0(archive$cols_y[2], "_mean"), paste0(archive$cols_y[2], "_se"))
+                    }
+                    print("Column names:")
+                    print(col_names)
+                    # Add new columns to candidate
+                    for (col_name in col_names) {
+                    if (!col_name %in% names(candidate)) {
+                        candidate[, (col_name) := NA]
+                        }
+                    }
+                    print("candidate columns: ")
+                    print(names(candidate))
+
+                    # Add the predicted mean values [1] and their standard errors [2] to candidate_new
+                    if (length(archive$cols_y) > 1) {
+                    candidate_new[, (col_names) := .(prediction[[1]]$mean[1], prediction[[1]]$se[1],
+                                                    prediction[[2]]$mean[1], prediction[[2]]$se[1])]
+                    } else {
+                    candidate_new[, (col_names) := .(prediction$mean[1], prediction$se[1])]
+                    }
+                    if (i > 1) {
+                    candidate <- rbind(candidate, candidate_new, fill = TRUE)
+                    }
+                    if (i < q) {
+                    candidate_new <- update_and_optimize(acq_function, acq_optimizer,
+                                                        tmp_archive, candidate_new,
+                                                        min_values, metadata)
+                    }
                 }
-                candidate_new = update_and_optimize(acq_function, acq_optimizer, 
-                                                    tmp_archive, candidate_new, 
-                                                    lie, metadata)
+
+
+                #     candidate_new = update_and_optimize(acq_function, acq_optimizer,
+                #                                         tmp_archive, candidate_new, 
+                #                                         lie, metadata)
+                #     candidate = rbind(candidate, candidate_new)
+                # }
+                # candidate_new = update_and_optimize(acq_function, acq_optimizer, 
+                #                                     tmp_archive, candidate_new, 
+                #                                     lie, metadata)
                 # Iterate over each column in candidate
                 for (col in names(candidate_new)) {
                     # If the column is numeric, round and format it
@@ -192,7 +234,7 @@ def main():
                 
                 save_archive(archive, acq_function, acq_optimizer, metadata)
                 return(list(candidate, archive, acq_function))
-                }
+            }
 
             experiment <- function(data, metadata) {
                 set.seed(metadata$seed)
@@ -236,20 +278,20 @@ def main():
 
                     # Add the parameter to the search space
                     if (param_info == "float") {
-                        # Check if metadata$to_nearest is numeric
-                        if (is.numeric(as.numeric(metadata$to_nearest))) {
-                            values = seq(lower, upper, by=as.numeric(metadata$to_nearest))
-                            search_space$add(ParamDbl$new(id = param_name, 
-                                                          lower = lower, upper = upper))
-                        } else {
-                            print(paste("metadata$to_nearest is not numeric for 
-                                         param_name:", param_name))
-                        }
+                        values = seq(lower, upper, by=as.numeric(metadata$to_nearest))
+                        search_space$add(ParamDbl$new(id = param_name, 
+                                                        lower = lower, upper = upper))
                     } else if (param_info == "integer") {
                         search_space$add(ParamInt$new(id = param_name, 
                                                       lower = lower, upper = upper))
                     }
                 }
+                        # # Check if metadata$to_nearest is numeric
+                        # if (is.numeric(as.numeric(metadata$to_nearest))) {
+                        # } else {
+                        #     print(paste("metadata$to_nearest is not numeric for 
+                        #                  param_name:", param_name))
+                        # }
                 # Initialize an empty ParamSet for the codomain
                 codomain = ParamSet$new(params = list())
 
@@ -261,10 +303,6 @@ def main():
                     # Add the output to the codomain
                     codomain$add(ParamDbl$new(id = output_name, tags = direction))
                 }
-                # for (output_name in metadata$output_column_names) {
-                #     # Add the output to the codomain
-                #     codomain$add(ParamDbl$new(id = output_name, tags = metadata$direction))
-                # }
 
                 archive <- Archive$new(search_space = search_space, codomain = codomain)
 
@@ -274,14 +312,19 @@ def main():
                 # Print unique values of output2
                 print(unique(data$output2))
                 
-                # Convert output columns to doubles
-                output_data <- data.table(sapply(data[, metadata$output_column_names,
-                                                      with=FALSE], as.double))
+                # # Convert output columns to doubles
+                # output_data <- data.table(sapply(data[, metadata$output_column_names,
+                #                                       with=FALSE], as.double))
 
-                # Use parameter_info in the subset operation
-                archive$add_evals(xdt = data[, names(metadata$parameter_info), with=FALSE],
-                                  ydt = output_data)
-            
+                # # Use parameter_info in the subset operation
+                # archive$add_evals(xdt = data[, names(metadata$parameter_info), with=FALSE],
+                #                   ydt = output_data)
+
+                  # Use parameter_info in the subset operation
+                archive$add_evals(xdt = data[, names(metadata$parameter_info), with = FALSE],
+                                  ydt = data[, metadata$output_column_names, with = FALSE])
+
+
 
                 print("Model archive so far: ")
                 print(archive)
@@ -289,7 +332,8 @@ def main():
                 num_objectives <- length(metadata$output_column_names)
 
                 if (num_objectives == 1) {
-                    surrogate <- srlrn(lrn("regr.ranger"), archive = archive)
+                    #surrogate <- srlrn(lrn("regr.ranger"), archive = archive)
+                    surrogate <- srlrn(default_rf(), archive = archive)
                     acq_function <- acqf("ei", surrogate = surrogate)
                 } else {
                     surrogate <- srlrn(list(default_rf(), default_rf()), archive = archive)
@@ -301,32 +345,13 @@ def main():
                                         acq_function = acq_function)
 
                 q <- as.integer(metadata$num_random_lines)
-                #   print(q)
-                #   print(acq_function)
-                #   print(acq_optimizer)
-                #   print(data)
 
                 result <- add_evals_to_archive(archive, acq_function,
-                                                acq_optimizer, data, q, metadata)
+                                               acq_optimizer, data, q, metadata)
 
                 candidate <- result[[1]]
                 archive <- result[[2]]
                 acq_function <- result[[3]]
-                # surrogate = srlrn(lrn("regr.ranger"), archive = archive)
-                # acq_function = acqf("ei", surrogate = surrogate)
-                # acq_optimizer = acqo(opt("random_search", batch_size = 1000),
-                #                     terminator = trm("evals", n_evals = 1000),
-                #                     acq_function = acq_function)
-                # q = as.integer(metadata$num_random_lines)
-                # # print(q)
-                # # print(acq_function)
-                # # print(acq_optimizer)
-                # # print(data)
-                # result = add_evals_to_archive(archive, acq_function, acq_optimizer, data, q, metadata)
-
-                # candidate = result[[1]]
-                # archive = result[[2]]
-                # acq_function = result[[3]]
 
                 print(result)
 
@@ -337,10 +362,21 @@ def main():
                 print(archive)
 
                 x2_dt <- as.data.table(x2)
-                data <- rbindlist(list(data, x2_dt), fill = TRUE)
-                print(data)
+
+                # Create data_no_preds by combining data and x2_dt
+                data_no_preds <- rbindlist(list(data, x2_dt), fill = TRUE)
+
+                # Create data_with_preds by combining data and candidate
+                candidate_with_preds <- candidate[, -c(".already_evaluated","x_domain"), with = FALSE]
+                data_with_preds <- rbindlist(list(data, candidate_with_preds), fill = TRUE)
+                
+                # data <- rbindlist(list(data, x2_dt), fill = TRUE)
+                print("Data with preds: ")
+                print(data_no_preds)
+                print("Data with preds: ")
+                print(data_with_preds)
                 print("Returning data to streamlit")
-                return(data)
+                return(data_no_preds)
 
                 }
             """
