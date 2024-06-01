@@ -15,6 +15,8 @@ from utils import (
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 
+from datetime import datetime
+
 st.title("Propose Experiment")
 
 
@@ -101,7 +103,6 @@ def main():
             library(mlr3learners)
             library(bbotk)
             library(data.table)
-            # library(tibble)
             
             round_to_nearest <- function(x, metadata) {
                 to_nearest = as.numeric(metadata$to_nearest)
@@ -153,8 +154,6 @@ def main():
             }
 
             add_evals_to_archive <- function(archive, acq_function, acq_optimizer, data, q, metadata) {
-                # lie <- data.table()
-                # liar <- min
                 # Check inputs
                 if (!is.data.table(archive$data)) {
                     stop("archive$data must be a data.table")
@@ -215,15 +214,6 @@ def main():
                     }
                 }
 
-
-                #     candidate_new = update_and_optimize(acq_function, acq_optimizer,
-                #                                         tmp_archive, candidate_new, 
-                #                                         lie, metadata)
-                #     candidate = rbind(candidate, candidate_new)
-                # }
-                # candidate_new = update_and_optimize(acq_function, acq_optimizer, 
-                #                                     tmp_archive, candidate_new, 
-                #                                     lie, metadata)
                 # Iterate over each column in candidate
                 for (col in names(candidate_new)) {
                     # If the column is numeric, round and format it
@@ -369,15 +359,18 @@ def main():
                 # Create data_with_preds by combining data and candidate
                 candidate_with_preds <- candidate[, -c(".already_evaluated","x_domain"), with = FALSE]
                 data_with_preds <- rbindlist(list(data, candidate_with_preds), fill = TRUE)
-                
+
                 # data <- rbindlist(list(data, x2_dt), fill = TRUE)
-                print("Data with preds: ")
+                print("Data no preds: ")
                 print(data_no_preds)
                 print("Data with preds: ")
                 print(data_with_preds)
+                
+                # Combine the results into a list
+                result <- list(data_no_preds = data_no_preds, data_with_preds = data_with_preds)
+ 
                 print("Returning data to streamlit")
-                return(data_no_preds)
-
+                return(result)
                 }
             """
             )
@@ -392,14 +385,18 @@ def main():
                 # Call the R function
                 rsum = ro.r["experiment"]
                 result = rsum(r_data, r_metadata)
+                result_no_preds = result["data_no_preds"]
+                result_with_preds = result["data_with_preds"]
 
                 upload_metadata(st.session_state.metadata, batch_number)
 
                 # Convert R data frame to pandas data frame
-                df = ro.conversion.get_conversion().rpy2py(result)
+                df_no_preds = ro.conversion.get_conversion().rpy2py(result_no_preds)
+                df_with_preds = ro.conversion.get_conversion().rpy2py(result_with_preds)
 
                 # Replace -2147483648 with np.nan if -2147483648 exists in the DataFrame
-                replace_value_with_nan(df)
+                replace_value_with_nan(df_no_preds)
+                replace_value_with_nan(df_with_preds)
 
                 save_metadata(
                     st.session_state.metadata, user_id, selected_table, batch_number
@@ -412,15 +409,28 @@ def main():
                     bucket_name, user_id, selected_table, batch_number
                 )
 
-                output_file_name = f"{batch_number}-data.csv"
+                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+                filename_no_preds = f"{timestamp}_{batch_number}-data.csv"
+                filename_with_preds = f"{timestamp}_{batch_number}-with-preds.csv"
+
                 save_to_local(
                     bucket_name,
                     user_id,
                     selected_table,
-                    output_file_name,
-                    df,
+                    filename_no_preds,
+                    df_no_preds,
                     batch_number,
                 )
+
+                save_to_local(
+                    bucket_name,
+                    user_id,
+                    selected_table,
+                    filename_with_preds,
+                    df_with_preds,
+                    batch_number,
+                )
+
                 upload_local_to_bucket(
                     bucket_name,
                     user_id,
@@ -434,8 +444,8 @@ def main():
                 st.session_state.update_clicked = False
                 st.session_state.button_start_ml = False
 
-                print(df)
-                st.write(df)
+                print(df_no_preds)
+                st.write(df_no_preds)
 
                 # store metadata in session_state
                 st.write(
