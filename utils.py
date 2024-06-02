@@ -587,7 +587,7 @@ def plot_pdp_old(df):
 
 
 def plot_pdp(
-    df: pd.DataFrame, model: RandomForestRegressor, n_outputs: int, output_name: str
+    df: pd.DataFrame, model: RandomForestRegressor, output_name: str, n_outputs: int = 1
 ):
     """
     This function plots a partial dependence graph for each numerical feature in the given DataFrame.
@@ -775,11 +775,18 @@ def feature_importance_multi(
         st.plotly_chart(fig)
 
 
-def show_dashboard(df: pd.DataFrame, model: RandomForestRegressor):
-    df_styled = highlight_max(df)
+def show_dashboard(
+    df: pd.DataFrame,
+    model: RandomForestRegressor,
+    y_directions: Dict[str, str],
+    y_columns: list[str],
+):
+    y_direction = next(iter(y_directions.values()))
+    y_column = y_columns[0]
+    df_styled = highlight_max(df, y_direction)
     st.dataframe(df_styled)
     plot_pairplot(df)
-    plot_pdp(df, model)
+    plot_pdp(df, model, y_column)
 
 
 def show_dashboard_multi(
@@ -808,7 +815,7 @@ def show_dashboard_multi(
     # For each model
     for model, output_name in zip(models, y_columns):
         # Plot a Partial Dependence Plot
-        plot_pdp(df, model, len(y_directions), output_name)
+        plot_pdp(df, model, output_name, len(y_directions))
 
 
 def show_interaction_pdp(

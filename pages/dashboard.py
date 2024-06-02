@@ -59,27 +59,28 @@ def main():
             # Once selected, the tuple of two features is added as pair_param
             pair_param = [tuple(selected_features)]
 
-            if len(st.session_state.metadata["output_column_names"]) == 2:
+            directions = st.session_state.metadata["directions"]
+            output_columns = st.session_state.metadata["output_column_names"]
+
+            if len(output_columns) == 2:
                 models = train_model_multi(df)
                 show_dashboard_multi(
                     df,
                     models,
-                    st.session_state.metadata["directions"],
-                    st.session_state.metadata["output_column_names"],
+                    directions,
+                    output_columns,
                 )
-                feature_importance_multi(
-                    df, models, st.session_state.metadata["output_column_names"]
-                )
+                feature_importance_multi(df, models, output_columns)
                 show_interaction_pdp_multi(
                     df,
                     pair_param,
                     models,
-                    st.session_state.metadata["output_column_names"],
+                    output_columns,
                     overlay=True,
                 )
             else:
                 model = train_model(df)
-                show_dashboard(df, model)
+                show_dashboard(df, model, directions, output_columns)
                 feature_importance(df, model)
                 show_interaction_pdp(df, pair_param, model, overlay=True)
 
