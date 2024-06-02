@@ -16,6 +16,8 @@ import pandas as pd
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 
+from datetime import datetime
+
 st.title("Update Experiment")
 
 
@@ -103,7 +105,6 @@ def main():
                     library(tibble)
                     library(R.utils)
 
-
                     round_to_nearest <- function(x, metadata) {
                         to_nearest = as.numeric(metadata$to_nearest)
                         if (is.data.table(x) || is.data.frame(x)) {
@@ -123,37 +124,49 @@ def main():
                         return(x)
                     }
 
-                    load_file <- function(files, pattern) {
-                        # Check if there are files that match the pattern
-                        matched_files = grep(pattern, files, value = TRUE)
+                    # Function to find the latest file
+                    find_latest_file <- function(files, pattern) {
+                        matched_files <- grep(pattern, files, value = TRUE)
                         if (length(matched_files) == 0) {
                             stop(paste("No", pattern, "files found"))
                         }
-
-                        # Filter for the latest file
-                        latest_file = max(matched_files)
-
-                        # Check if latest_file is a valid file
-                        if (!file.exists(latest_file)) {
-                            stop(paste("File does not exist:", latest_file))
+                        timestamps <- as.numeric(gsub(".*-(\\\\d+).*", "\\\\1", matched_files))
+                        latest_index <- which.max(timestamps)
+                        return(matched_files[latest_index])
+                    }
+                    
+                    # Function to load a file
+                    load_file <- function(file_path, file_type) {
+                        if (!file.exists(file_path)) {
+                            stop(paste("File does not exist:", file_path))
                         }
-
-                        # Load the file
-                        loaded_file = readRDS(latest_file)
-
-                        return(loaded_file)
+                        if (file_type == "csv") {
+                            return(read.csv(file_path))
+                        } else if (file_type == "rds") {
+                            return(readRDS(file_path))
+                        } else {
+                            stop(paste("Unsupported file type:", file_type))
+                        }
                     }
 
-                    # load_archive must be modified to load the latest metadata-*.json 
-                    load_archive <- function(metadata) {
-                        # Get a list of all *.rds files in the bucket
-                        files = list.files(path = paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", metadata$batch_number), pattern = "*.rds", full.names = TRUE)
+                    # Function to load files based on pattern and type
+                    load_files <- function(metadata, pattern, file_type) {
+                        files = list.files(path = paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", metadata$batch_number), pattern = paste0("*.", file_type), full.names = TRUE)
+                        latest_file = find_latest_file(files, pattern)
+                        return(load_file(latest_file, file_type))
+                    }
 
-                        # Load the acqf-, acqopt-, and archive- files
-                        acqf = load_file(files, "acqf-")
-                        acqopt = load_file(files, "acqopt-")
-                        archive = load_file(files, "archive-")
+                    # Function to load data with predictions
+                    load_predicted_data <- function(metadata) {
+                        metadata$batch_number <- as.integer(metadata$batch_number)
+                        return(load_files(metadata, "with-preds", "csv"))
+                    }
 
+                    # Function to load archive data
+                    load_archive_data <- function(metadata) {
+                        acqf = load_files(metadata, "acqf-", "rds")
+                        acqopt = load_files(metadata, "acqopt-", "rds")
+                        archive = load_files(metadata, "archive-", "rds")
                         acqf$surrogate$archive = archive
                         return(list(archive, acqf, acqopt))
                     }
@@ -166,12 +179,12 @@ def main():
 
                         # Define the directory path
                         dir_path = paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", new_batch_number)
-                        
+
                         # Create the directory if it doesn't exist
                         if (!dir.exists(dir_path)) {
                             dir.create(dir_path, recursive = TRUE)
                         }
-                        
+
                         # Save the objects to files
                         saveRDS(archive, paste0(dir_path, "/archive-", timestamp, ".rds"))
                         saveRDS(acq_function, paste0(dir_path, "/acqf-", timestamp, ".rds"))
@@ -181,45 +194,75 @@ def main():
                     update_and_optimize <- function(acq_function, acq_optimizer, tmp_archive, candidate_new, lie, metadata) {
                         acq_function$surrogate$update()
                         acq_function$update()
-                        tmp_archive$add_evals(xdt = candidate_new, xss_trafoed = transform_xdt_to_xss(candidate_new, tmp_archive$search_space), ydt = lie)
+                        tmp_archive$add_evals(xdt = candidate_new,
+                                              xss_trafoed = transform_xdt_to_xss(candidate_new, tmp_archive$search_space),
+                                              ydt = lie)
                         candidate_new = acq_optimizer$optimize()
                         candidate_new = round_to_nearest(candidate_new, metadata)
                         return(candidate_new)
                     }
 
                     add_evals_to_archive <- function(archive, acq_function, acq_optimizer, data, q, metadata) {
-                        lie <- data.table()
-                        liar <- min
+                        # Check inputs
+                        if (!is.data.table(archive$data)) {
+                            stop("archive$data must be a data.table")
+                        }
+
+                        min_value <- min
                         acq_function$surrogate$update()
                         acq_function$update()
                         candidate <- acq_optimizer$optimize()
                         candidate <- round_to_nearest(candidate, metadata)
                         print(candidate)
+
                         tmp_archive = archive$clone(deep = TRUE)
                         acq_function$surrogate$archive = tmp_archive
 
+                        min_values <- data.table()
+
                         # Apply the liar function to each column in archive$cols_y
                         for (col_name in archive$cols_y) {
-                            lie[, (col_name) := liar(archive$data[[col_name]])]
+                            min_values[, (col_name) := min_value(archive$data[[col_name]])]
                         }
 
-                        # lie[, archive$cols_y := liar(archive$data[[archive$cols_y]])]
                         candidate_new = candidate
+                        for (i in seq_len(q)) {
+                            
+                            # Predict y or y1 y2 for the new candidate
+                            prediction <- acq_function$surrogate$predict(candidate_new)
 
-                        # Check if lie is a data.table
-                        if (!is.data.table(lie)) {
-                            stop("lie is not a data.table")
+                            col_names <- c(paste0(archive$cols_y[1], "_mean"), paste0(archive$cols_y[1], "_se"))
+                            if (length(archive$cols_y) > 1) {
+                                col_names <- c(col_names, paste0(archive$cols_y[2], "_mean"), paste0(archive$cols_y[2], "_se"))
+                            }
+                            print("Column names:")
+                            print(col_names)
+                            # Add new columns to candidate
+                            for (col_name in col_names) {
+                            if (!col_name %in% names(candidate)) {
+                                candidate[, (col_name) := NA]
+                                }
+                            }
+                            print("candidate columns: ")
+                            print(names(candidate))
+
+                            # Add the predicted mean values [1] and their standard errors [2] to candidate_new
+                            if (length(archive$cols_y) > 1) {
+                            candidate_new[, (col_names) := .(prediction[[1]]$mean[1], prediction[[1]]$se[1],
+                                                            prediction[[2]]$mean[1], prediction[[2]]$se[1])]
+                            } else {
+                            candidate_new[, (col_names) := .(prediction$mean[1], prediction$se[1])]
+                            }
+                            if (i > 1) {
+                            candidate <- rbind(candidate, candidate_new, fill = TRUE)
+                            }
+                            if (i < q) {
+                            candidate_new <- update_and_optimize(acq_function, acq_optimizer,
+                                                                tmp_archive, candidate_new,
+                                                                min_values, metadata)
+                            }
                         }
-                        candidate_new = candidate
-                        for (i in seq_len(q)[-1L]) {
-                            candidate_new = update_and_optimize(acq_function, acq_optimizer,
-                                                                tmp_archive, candidate_new, 
-                                                                lie, metadata)
-                            candidate = rbind(candidate, candidate_new)
-                        }
-                        candidate_new = update_and_optimize(acq_function, acq_optimizer, 
-                                                            tmp_archive, candidate_new, 
-                                                            lie, metadata)
+
                         # Iterate over each column in candidate
                         for (col in names(candidate_new)) {
                             # If the column is numeric, round and format it
@@ -230,19 +273,31 @@ def main():
                         
                         save_archive(archive, acq_function, acq_optimizer, metadata)
                         return(list(candidate, archive, acq_function))
-                        }
+                    } 
+
                     experiment <- function(data, metadata) {
                         set.seed(metadata$seed)
-                        result <- load_archive(metadata)
+                        result <- load_archive_data(metadata)
+                        data_with_preds <- load_predicted_data(metadata)
+
+                        print("Data with preds: ")
+                        print(data_with_preds)
+
+                        print("NUM RANDOM LINES: ")
+                        print(metadata$num_random_lines)
+
                         full_data <- as.data.table(data)
-                        # print(data)
-                        data <- tail(full_data, n=metadata$num_random_lines)
+                        data <- tail(full_data, n=as.integer(metadata$num_random_lines))
+                        print("Full data: ")
+                        print(full_data)
+                        
+                        print("Tail Data: ")
                         print(data)
-                            
+
                         archive <- result[[1]]
                         acq_function <- result[[2]]
                         acq_optimizer <- result[[3]]
-                        
+
                         # Check if metadata$output_column_names is NULL or empty
                         if (is.null(metadata$output_column_names) ||
                             length(metadata$output_column_names) == 0) {
@@ -254,18 +309,14 @@ def main():
                             stop("Some names in metadata$output_column_names do not exist in data")
                         }
 
-                        # print(class(archive))
-                        # print(methods(class=class(archive)))
-
-
                         # Now you can safely call the add_evals method
-                        archive$add_evals(xdt = data[, names(metadata$parameter_info), with=FALSE], 
-                                          ydt = data[, metadata$output_column_names, with=FALSE])
+                        archive$add_evals(xdt = data[, names(metadata$parameter_info), with=FALSE],
+                                            ydt = data[, metadata$output_column_names, with=FALSE])
                         print("Model archive so far: ")
                         print(archive)
                         q = metadata$num_random_lines
                         result = add_evals_to_archive(archive, acq_function, acq_optimizer,
-                                                      data, q, metadata)
+                                                        data, q, metadata)
 
                         candidate <- result[[1]]
                         archive <- result[[2]]
@@ -289,11 +340,25 @@ def main():
 
                         x2_dt <- as.data.table(x2)
                         full_data <- rbindlist(list(full_data, x2_dt), fill = TRUE)
-                        print(full_data)
-                        print("Returning data to streamlit")
-                        return(full_data)
 
-                        }
+                        print("Full data after adding new candidates: ")
+                        print(full_data)
+
+                        # Prepare candidate_with_preds
+                        candidate_with_preds <- candidate[, -c(".already_evaluated","x_domain"), with = FALSE]
+
+                        # Combine data_with_preds and candidate_with_preds
+                        data_with_preds <- rbindlist(list(data_with_preds, candidate_with_preds), fill = TRUE)
+                        print("Data with preds, new candidate: ")
+                        print(data_with_preds)
+
+                        # Combine the results into a list
+                        result <- list(data_no_preds = full_data, data_with_preds = data_with_preds)
+
+                        print("Returning data to streamlit")
+                        return(result)
+
+                    }
                         """
                     )
 
@@ -319,15 +384,20 @@ def main():
                 rsum = ro.r["experiment"]
                 result = rsum(r_data, r_metadata)
 
+                data_no_preds = result["data_no_preds"]
+                data_with_preds = result["data_with_preds"]
+
                 metadata["batch_number"] = batch_number
 
                 upload_metadata(metadata, batch_number)
 
                 # Convert R data frame to pandas data frame
-                df = ro.conversion.get_conversion().rpy2py(result)
+                df_no_preds = ro.conversion.get_conversion().rpy2py(data_no_preds)
+                df_with_preds = ro.conversion.get_conversion().rpy2py(data_with_preds)
 
                 # Replace -2147483648 with np.nan if -2147483648 exists in the DataFrame
-                replace_value_with_nan(df)
+                replace_value_with_nan(df_no_preds)
+                replace_value_with_nan(df_with_preds)
 
                 save_metadata(metadata, user_id, selected_table, batch_number)
                 st.write("Saving metadata to local file")
@@ -336,15 +406,28 @@ def main():
                     bucket_name, user_id, selected_table, batch_number
                 )
 
-                output_file_name = f"{batch_number}-data.csv"
+                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+                filename_no_preds = f"{timestamp}_{batch_number}-data.csv"
+                filename_with_preds = f"{timestamp}_{batch_number}-data-with-preds.csv"
+
                 save_to_local(
                     bucket_name,
                     user_id,
                     selected_table,
-                    output_file_name,
-                    df,
+                    filename_no_preds,
+                    df_no_preds,
                     batch_number,
                 )
+
+                save_to_local(
+                    bucket_name,
+                    user_id,
+                    selected_table,
+                    filename_with_preds,
+                    df_with_preds,
+                    batch_number,
+                )
+
                 upload_local_to_bucket(
                     bucket_name,
                     user_id,
@@ -362,9 +445,22 @@ def main():
                 except Exception as e:
                     st.write(f"Error uploading data: {e}")
 
-                st.dataframe(df)
+                st.dataframe(df_no_preds)
                 st.session_state.update_clicked = False
                 st.session_state.button_start_ml = False
+
+                st.session_state.metadata["X_columns"] = list(
+                    st.session_state.metadata["parameter_info"].keys()
+                )
+
+                # Extract output_column_names and directions
+                output_column_names = st.session_state.metadata["output_column_names"]
+                directions = st.session_state.metadata["directions"]
+
+                # Combine output_column_names and directions
+                st.session_state.metadata["directions"] = dict(
+                    zip(output_column_names, directions)
+                )
 
                 st.write(
                     "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"

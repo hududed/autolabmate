@@ -64,17 +64,16 @@ def main():
                     key=column,
                 )
 
-            # Add y_directions to metadata
-            st.session_state.metadata["y_directions"] = y_directions
-
             # Initialize metadata in session state if it doesn't exist
             if "metadata" not in st.session_state:
                 st.session_state.metadata = {}
+            # Add y_directions to metadata
+            st.session_state.metadata["directions"] = y_directions
 
             # Add table_name, X_columns, and y_columns to metadata
             st.session_state.metadata["table_name"] = st.session_state.table_name
             st.session_state.metadata["X_columns"] = X_columns
-            st.session_state.metadata["y_columns"] = y_columns
+            st.session_state.metadata["output_column_names"] = y_columns
 
             # Rearrange the DataFrame
             df = df[X_columns + y_columns]

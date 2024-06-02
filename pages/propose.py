@@ -177,7 +177,7 @@ def main():
                 }
 
                 candidate_new = candidate
-                for (i in seq_len(q)[-1L]) {
+                for (i in seq_len(q)) {
                     
                     # Predict y or y1 y2 for the new candidate
                     prediction <- acq_function$surrogate$predict(candidate_new)
@@ -411,7 +411,7 @@ def main():
 
                 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
                 filename_no_preds = f"{timestamp}_{batch_number}-data.csv"
-                filename_with_preds = f"{timestamp}_{batch_number}-with-preds.csv"
+                filename_with_preds = f"{timestamp}_{batch_number}-data-with-preds.csv"
 
                 save_to_local(
                     bucket_name,
@@ -447,7 +447,18 @@ def main():
                 print(df_no_preds)
                 st.write(df_no_preds)
 
-                # store metadata in session_state
+                st.session_state.metadata["X_columns"] = list(
+                    st.session_state.metadata["parameter_info"].keys()
+                )
+                # Extract output_column_names and directions
+                output_column_names = st.session_state.metadata["output_column_names"]
+                directions = st.session_state.metadata["directions"]
+
+                # Combine output_column_names and directions
+                st.session_state.metadata["directions"] = dict(
+                    zip(output_column_names, directions)
+                )
+
                 st.write(
                     "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"
                 )
