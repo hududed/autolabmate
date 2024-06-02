@@ -64,6 +64,7 @@ def main():
                     key=column,
                 )
 
+            # TODO: save metadata to database to avoid session, e.g. switching tables (highlights wont work)
             # Initialize metadata in session state if it doesn't exist
             if "metadata" not in st.session_state:
                 st.session_state.metadata = {}

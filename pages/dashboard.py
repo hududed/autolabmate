@@ -62,6 +62,7 @@ def main():
             directions = st.session_state.metadata["directions"]
             output_columns = st.session_state.metadata["output_column_names"]
 
+            # TODO: save metadata to db, currently switching between single and multi will not work
             if len(output_columns) == 2:
                 models = train_model_multi(df)
                 show_dashboard_multi(
