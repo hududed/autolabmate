@@ -18,6 +18,15 @@ def main():
 
     if "table_name" not in st.session_state:
         st.session_state.table_name = ""
+    if "metadata" not in st.session_state:
+        st.session_state.metadata = {
+            "directions": {},
+            "table_name": "",
+            "X_columns": [],
+            "output_column_names": [],
+        }
+    if "update_clicked" not in st.session_state:
+        st.session_state.update_clicked = False
     user_id = st.session_state.user_id
 
     st.write("Please upload your first batch CSV file.")
@@ -88,7 +97,7 @@ def main():
 
             st.session_state.update_clicked = True
 
-            insert_data(table_name, df, user_id)
+            insert_data(table_name, df, user_id, st.session_state.metadata)
 
             bucket_name = "test-bucket"
             file.seek(0)  # Reset the file pointer to the beginning

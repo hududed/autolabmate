@@ -4,8 +4,9 @@ from utils import (
     show_dashboard_multi,
     show_interaction_pdp,
     show_interaction_pdp_multi,
+    get_features,
     get_table_names,
-    get_latest_row,
+    get_latest_row_and_metadata,
     train_model,
     train_model_multi,
     feature_importance,
@@ -38,11 +39,13 @@ def main():
     )
 
     if selected_table:
-        df = get_latest_row(user_id, selected_table)
+        df, metadata = get_latest_row_and_metadata(user_id, selected_table)
         df = df.dropna()
 
         # Get the first N columns based on the length of session X_columns
-        features = df.columns[: len(st.session_state.metadata["X_columns"])].tolist()
+        features = get_features(df)
+        if len(metadata["output_column_names"]) == 2:
+            features = features[:-1]
 
         # User input multibox select exactly 2 features to compare from the list of features
         selected_features = st.multiselect(

@@ -244,6 +244,33 @@ def get_table_names(user_id):
     return df["table_name"].tolist()
 
 
+def get_latest_row_and_metadata(
+    user_id, table_name
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    # Prepare the SELECT statement
+    query = text(
+        "SELECT csv_dict, columns_order, metadata FROM experiments WHERE user_id = :user_id AND table_name = :table_name ORDER BY timestamp DESC LIMIT 1"
+    )
+
+    # Connect to the database
+    with engine.connect() as conn:
+        # Execute the SELECT statement
+        csv_dict, columns_order, metadata = conn.execute(
+            query, {"user_id": user_id, "table_name": table_name}
+        ).fetchone()
+        conn.commit()
+        conn.close()
+
+    # Convert the metadata from a JSON string to a dictionary if necessary
+    if metadata is None:
+        metadata = {}
+    # Load the result into a DataFrame
+    df = pd.DataFrame(csv_dict)
+    # Reorder the columns according to the stored order
+    df = df[columns_order]
+    return df, metadata
+
+
 def get_latest_row(user_id, table_name) -> pd.DataFrame:
     # Prepare the SELECT statement
     query = text(
@@ -358,17 +385,21 @@ def sanitize_column_names(table):
     return table
 
 
-def insert_data(table_name: str, df: pd.DataFrame, user_id: str) -> None:
+def insert_data(
+    table_name: str, df: pd.DataFrame, user_id: str, metadata: Dict[str, Any] = None
+) -> None:
     table_name = table_name.lower()
     df = df.where(pd.notnull(df), None)
     # Convert the DataFrame into a dictionary and then into a JSON string
     json_str = simplejson.dumps(df.to_dict(orient="records"), ignore_nan=True)
     # Store the order of the columns
     columns_order = json.dumps(list(df.columns))
+    # Convert the metadata into a JSON string
+    metadata_str = json.dumps(metadata)
     # Connect to the database
     with engine.connect() as conn:
         # Prepare the INSERT INTO statement
-        query = f"INSERT INTO experiments (user_id, table_name, csv_dict, columns_order) VALUES (:user_id, :table_name, :csv_dict, :columns_order)"
+        query = "INSERT INTO experiments (user_id, table_name, csv_dict, columns_order, metadata) VALUES (:user_id, :table_name, :csv_dict, :columns_order, :metadata)"
         # Insert data into the table
         conn.execute(
             text(query),
@@ -377,6 +408,7 @@ def insert_data(table_name: str, df: pd.DataFrame, user_id: str) -> None:
                 "table_name": table_name,
                 "csv_dict": json_str,
                 "columns_order": columns_order,
+                "metadata": metadata_str,
             },
         )
         conn.commit()
