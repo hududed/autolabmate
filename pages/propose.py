@@ -3,14 +3,15 @@ from utils import (
     get_user_inputs,
     validate_inputs,
     display_dictionary,
-    upload_metadata,
+    upload_metadata_to_bucket,
     save_metadata,
     py_dict_to_r_list,
     upload_local_to_bucket,
     save_to_local,
     replace_value_with_nan,
     get_table_names,
-    get_latest_row,
+    get_latest_row_and_metadata,
+    insert_data,
 )
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
@@ -36,20 +37,21 @@ def main():
         st.write("No tables found.")
         return
 
-    default_table = (
-        st.session_state.table_name
-        if "table_name" in st.session_state
-        and st.session_state.table_name in table_names
-        else table_names[0]
-    )
+    # Get the latest metadata
+    df, metadata, latest_table = get_latest_row_and_metadata(user_id)
+
+    # Get the table name from the latest metadata
+    default_table = latest_table
     selected_table = st.selectbox(
         "Select a table", table_names, index=table_names.index(default_table)
     )
     # Add seed input
     seed = st.number_input("Enter a seed", value=42, step=1)
 
+    if selected_table != default_table:
+        df, metadata, latest_table = get_latest_row_and_metadata(user_id)
+
     if selected_table:
-        df = get_latest_row(user_id, selected_table)
         (
             batch_number,
             optimization_type,
@@ -72,7 +74,7 @@ def main():
                     st.write(error)
             else:
                 st.write("Validation passed.")
-                st.session_state.metadata = display_dictionary(
+                metadata = display_dictionary(
                     seed,
                     batch_number,
                     selected_table,
@@ -85,7 +87,9 @@ def main():
                     directions,
                     user_id,
                     to_nearest,
+                    metadata,
                 )
+                insert_data(metadata["table_name"], df, user_id, metadata)
 
         # Add Start ML button
         if "button_start_ml" not in st.session_state:
@@ -103,7 +107,7 @@ def main():
             library(mlr3learners)
             library(bbotk)
             library(data.table)
-            
+
             round_to_nearest <- function(x, metadata) {
                 to_nearest = as.numeric(metadata$to_nearest)
                 if (is.data.table(x) || is.data.frame(x)) {
@@ -129,12 +133,12 @@ def main():
 
                 # Define the directory path
                 dir_path = paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", metadata$batch_number)
-                
+
                 # Create the directory if it doesn't exist
                 if (!dir.exists(dir_path)) {
                     dir.create(dir_path, recursive = TRUE)
                 }
-                
+
                 # Save the objects to files
                 saveRDS(archive, paste0(dir_path,  "/archive-", timestamp, ".rds"))
                 saveRDS(acq_function, paste0(dir_path, "/acqf-", timestamp, ".rds"))
@@ -178,7 +182,7 @@ def main():
 
                 candidate_new = candidate
                 for (i in seq_len(q)) {
-                    
+
                     # Predict y or y1 y2 for the new candidate
                     prediction <- acq_function$surrogate$predict(candidate_new)
 
@@ -221,7 +225,7 @@ def main():
                         candidate_new[[col]] <- format(round(candidate_new[[col]], 2), nsmall = 2)
                     }
                 }
-                
+
                 save_archive(archive, acq_function, acq_optimizer, metadata)
                 return(list(candidate, archive, acq_function))
             }
@@ -248,16 +252,13 @@ def main():
                         next
                     }
 
-                    # Remove the parentheses and split the string at the comma
-                    param_range_split = strsplit(gsub("[()]", "", param_range), ",")[[1]]
-
                     # Convert the results to appropriate type
                     if (param_info == "integer") {
-                        lower = as.integer(param_range_split[1])
-                        upper = as.integer(param_range_split[2])
+                        lower = as.integer(param_range[1])
+                        upper = as.integer(param_range[2])
                     } else if (param_info == "float") {
-                        lower = as.numeric(param_range_split[1])
-                        upper = as.numeric(param_range_split[2])
+                        lower = as.numeric(param_range[1])
+                        upper = as.numeric(param_range[2])
                     }
 
                     # Check if lower or upper is NA
@@ -269,19 +270,13 @@ def main():
                     # Add the parameter to the search space
                     if (param_info == "float") {
                         values = seq(lower, upper, by=as.numeric(metadata$to_nearest))
-                        search_space$add(ParamDbl$new(id = param_name, 
+                        search_space$add(ParamDbl$new(id = param_name,
                                                         lower = lower, upper = upper))
                     } else if (param_info == "integer") {
-                        search_space$add(ParamInt$new(id = param_name, 
+                        search_space$add(ParamInt$new(id = param_name,
                                                       lower = lower, upper = upper))
                     }
                 }
-                        # # Check if metadata$to_nearest is numeric
-                        # if (is.numeric(as.numeric(metadata$to_nearest))) {
-                        # } else {
-                        #     print(paste("metadata$to_nearest is not numeric for 
-                        #                  param_name:", param_name))
-                        # }
                 # Initialize an empty ParamSet for the codomain
                 codomain = ParamSet$new(params = list())
 
@@ -289,32 +284,29 @@ def main():
                 for (i in seq_along(metadata$output_column_names)) {
                     output_name <- metadata$output_column_names[i]
                     print(paste("Adding output to codomain with id: ", output_name))
-                    direction <- metadata$directions[i]
+                    direction <- toString(metadata$directions[i])
+
+                    # Map 'min' and 'max' to 'minimize' and 'maximize'
+                    if (direction == "min") {
+                        direction <- "minimize"
+                    } else if (direction == "max") {
+                        direction <- "maximize"
+                    }
+
                     # Add the output to the codomain
                     codomain$add(ParamDbl$new(id = output_name, tags = direction))
                 }
 
                 archive <- Archive$new(search_space = search_space, codomain = codomain)
 
-                # Print metadata$output_column_names
                 print(metadata$output_column_names)
 
-                # Print unique values of output2
                 print(unique(data$output2))
-                
-                # # Convert output columns to doubles
-                # output_data <- data.table(sapply(data[, metadata$output_column_names,
-                #                                       with=FALSE], as.double))
 
-                # # Use parameter_info in the subset operation
-                # archive$add_evals(xdt = data[, names(metadata$parameter_info), with=FALSE],
-                #                   ydt = output_data)
 
-                  # Use parameter_info in the subset operation
+                # Use parameter_info in the subset operation
                 archive$add_evals(xdt = data[, names(metadata$parameter_info), with = FALSE],
                                   ydt = data[, metadata$output_column_names, with = FALSE])
-
-
 
                 print("Model archive so far: ")
                 print(archive)
@@ -360,15 +352,14 @@ def main():
                 candidate_with_preds <- candidate[, -c(".already_evaluated","x_domain"), with = FALSE]
                 data_with_preds <- rbindlist(list(data, candidate_with_preds), fill = TRUE)
 
-                # data <- rbindlist(list(data, x2_dt), fill = TRUE)
                 print("Data no preds: ")
                 print(data_no_preds)
                 print("Data with preds: ")
                 print(data_with_preds)
-                
+
                 # Combine the results into a list
                 result <- list(data_no_preds = data_no_preds, data_with_preds = data_with_preds)
- 
+
                 print("Returning data to streamlit")
                 return(result)
                 }
@@ -380,7 +371,8 @@ def main():
             converter = ro.default_converter + pandas2ri.converter
             with converter.context():
                 r_data = ro.conversion.get_conversion().py2rpy(df)
-                r_metadata = py_dict_to_r_list(st.session_state.metadata)
+
+                r_metadata = py_dict_to_r_list(metadata)
 
                 # Call the R function
                 rsum = ro.r["experiment"]
@@ -388,7 +380,7 @@ def main():
                 result_no_preds = result["data_no_preds"]
                 result_with_preds = result["data_with_preds"]
 
-                upload_metadata(st.session_state.metadata, batch_number)
+                upload_metadata_to_bucket(metadata, batch_number)
 
                 # Convert R data frame to pandas data frame
                 df_no_preds = ro.conversion.get_conversion().rpy2py(result_no_preds)
@@ -398,12 +390,10 @@ def main():
                 replace_value_with_nan(df_no_preds)
                 replace_value_with_nan(df_with_preds)
 
-                save_metadata(
-                    st.session_state.metadata, user_id, selected_table, batch_number
-                )
+                save_metadata(metadata, user_id, selected_table, batch_number)
 
-                bucket_name = st.session_state.metadata["bucket_name"]
-                batch_number = st.session_state.metadata["batch_number"]
+                bucket_name = metadata["bucket_name"]
+                batch_number = metadata["batch_number"]
 
                 upload_local_to_bucket(
                     bucket_name, user_id, selected_table, batch_number
@@ -447,17 +437,13 @@ def main():
                 print(df_no_preds)
                 st.write(df_no_preds)
 
-                st.session_state.metadata["X_columns"] = list(
-                    st.session_state.metadata["parameter_info"].keys()
-                )
+                metadata["X_columns"] = list(metadata["parameter_info"].keys())
                 # Extract output_column_names and directions
-                output_column_names = st.session_state.metadata["output_column_names"]
-                directions = st.session_state.metadata["directions"]
+                output_column_names = metadata["output_column_names"]
+                directions = metadata["directions"]
 
                 # Combine output_column_names and directions
-                st.session_state.metadata["directions"] = dict(
-                    zip(output_column_names, directions)
-                )
+                metadata["directions"] = dict(zip(output_column_names, directions))
 
                 st.write(
                     "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"

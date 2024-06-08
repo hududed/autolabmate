@@ -69,7 +69,7 @@ def main():
             for column in y_columns:
                 y_directions[column] = st.selectbox(
                     f"Should {column} be optimized for min or max?",
-                    options=["min", "max"],
+                    options=["minimize", "maximize"],
                     key=column,
                 )
 

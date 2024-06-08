@@ -207,7 +207,7 @@ def upload_local_to_bucket(
                 raise e
 
 
-def upload_metadata(metadata, batch_number=1):
+def upload_metadata_to_bucket(metadata, batch_number=1):
     # Convert the metadata dictionary to a JSON string and encode it to bytes
     metadata_content = json.dumps(metadata).encode()
 
@@ -244,19 +244,17 @@ def get_table_names(user_id):
     return df["table_name"].tolist()
 
 
-def get_latest_row_and_metadata(
-    user_id, table_name
-) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+def get_latest_row_and_metadata(user_id) -> Tuple[pd.DataFrame, Dict[str, Any], str]:
     # Prepare the SELECT statement
     query = text(
-        "SELECT csv_dict, columns_order, metadata FROM experiments WHERE user_id = :user_id AND table_name = :table_name ORDER BY timestamp DESC LIMIT 1"
+        "SELECT csv_dict, columns_order, metadata, table_name FROM experiments WHERE user_id = :user_id ORDER BY timestamp DESC LIMIT 1"
     )
 
     # Connect to the database
     with engine.connect() as conn:
         # Execute the SELECT statement
-        csv_dict, columns_order, metadata = conn.execute(
-            query, {"user_id": user_id, "table_name": table_name}
+        csv_dict, columns_order, metadata, table_name = conn.execute(
+            query, {"user_id": user_id}
         ).fetchone()
         conn.commit()
         conn.close()
@@ -268,7 +266,7 @@ def get_latest_row_and_metadata(
     df = pd.DataFrame(csv_dict)
     # Reorder the columns according to the stored order
     df = df[columns_order]
-    return df, metadata
+    return df, metadata, table_name
 
 
 def get_latest_row(user_id, table_name) -> pd.DataFrame:
@@ -1035,38 +1033,41 @@ def validate_inputs(
 
 
 def display_dictionary(
-    seed,
-    batch_number,
-    table_name,
-    optimization_type,
-    output_column_names,
-    num_parameters,
-    num_random_lines,
-    parameter_info,
-    parameter_ranges,
-    direction,
-    user_id,
-    to_nearest,
+    seed: int,
+    batch_number: int,
+    table_name: str,
+    optimization_type: str,
+    output_column_names: list[str],
+    num_parameters: int,
+    num_random_lines: int,
+    parameter_info: Dict[str, Any],
+    parameter_ranges: tuple,
+    direction: str,
+    user_id: str,
+    to_nearest: float,
+    metadata: Dict[str, Any],
     bucket_name: str = "test-bucket",
 ) -> Dict[str, Any]:
-    metadata = {
-        "seed": seed,
-        "batch_number": batch_number,
-        "table_name": table_name,
-        "optimization_type": optimization_type,
-        "batch_type": "batch",
-        "output_column_names": output_column_names,
-        "num_parameters": num_parameters,
-        "num_random_lines": num_random_lines,
-        "parameter_info": parameter_info,
-        "parameter_ranges": parameter_ranges,
-        "learner": "regr.ranger",
-        "acquisition_function": "ei",
-        "directions": direction,
-        "bucket_name": bucket_name,
-        "user_id": user_id,
-        "to_nearest": to_nearest,
-    }
+    metadata.update(
+        {
+            "seed": seed,
+            "batch_number": batch_number,
+            "table_name": table_name,
+            "optimization_type": optimization_type,
+            "batch_type": "batch",
+            "output_column_names": output_column_names,
+            "num_parameters": num_parameters,
+            "num_random_lines": num_random_lines,
+            "parameter_info": parameter_info,
+            "parameter_ranges": parameter_ranges,
+            "learner": "regr.ranger",
+            "acquisition_function": "ei",
+            "directions": direction,
+            "bucket_name": bucket_name,
+            "user_id": user_id,
+            "to_nearest": to_nearest,
+        }
+    )
     display_metadata = {
         k: v for k, v in metadata.items() if k != "user_id" and k != "bucket_name"
     }
@@ -1075,7 +1076,7 @@ def display_dictionary(
     return metadata
 
 
-def py_dict_to_r_list(py_dict):
+def py_dict_to_r_list(py_dict: Dict[str, Any]):
     r_list = ro.ListVector({})
     for k, v in py_dict.items():
         if isinstance(v, dict):
