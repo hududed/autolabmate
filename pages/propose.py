@@ -10,7 +10,7 @@ from utils import (
     save_to_local,
     replace_value_with_nan,
     get_table_names,
-    get_latest_row_and_metadata,
+    get_latest_data_and_metadata,
     insert_data,
 )
 import rpy2.robjects as ro
@@ -38,7 +38,7 @@ def main():
         return
 
     # Get the latest metadata
-    df, metadata, latest_table = get_latest_row_and_metadata(user_id)
+    df, metadata, latest_table = get_latest_data_and_metadata(user_id)
 
     # Get the table name from the latest metadata
     default_table = latest_table
@@ -49,7 +49,7 @@ def main():
     seed = st.number_input("Enter a seed", value=42, step=1)
 
     if selected_table != default_table:
-        df, metadata, latest_table = get_latest_row_and_metadata(user_id)
+        df, metadata, latest_table = get_latest_data_and_metadata(user_id)
 
     if selected_table:
         (

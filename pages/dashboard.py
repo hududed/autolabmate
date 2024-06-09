@@ -6,7 +6,8 @@ from utils import (
     show_interaction_pdp_multi,
     get_features,
     get_table_names,
-    get_latest_row_and_metadata,
+    get_latest_data_for_table,
+    get_latest_data_and_metadata,
     train_model,
     train_model_multi,
     feature_importance,
@@ -28,18 +29,21 @@ def main():
         st.write("No tables found.")
         return
 
-    default_table = (
-        st.session_state.table_name
-        if "table_name" in st.session_state
-        and st.session_state.table_name in table_names
-        else table_names[0]
-    )
+    # Get the latest metadata
+    df, metadata, latest_table = get_latest_data_and_metadata(user_id)
+
+    default_table = latest_table
     selected_table = st.selectbox(
         "Select a table", table_names, index=table_names.index(default_table)
     )
 
+    if selected_table != default_table:
+        df, metadata = get_latest_data_for_table(user_id, selected_table)
+
+    if metadata is None:
+        raise ValueError("metadata is None. Please upload a new table.")
+
     if selected_table:
-        df, metadata = get_latest_row_and_metadata(user_id, selected_table)
         df = df.dropna()
 
         # Get the first N columns based on the length of session X_columns
@@ -62,8 +66,8 @@ def main():
             # Once selected, the tuple of two features is added as pair_param
             pair_param = [tuple(selected_features)]
 
-            directions = st.session_state.metadata["directions"]
-            output_columns = st.session_state.metadata["output_column_names"]
+            directions = metadata["directions"]
+            output_columns = metadata["output_column_names"]
 
             # TODO: save metadata to db, currently switching between single and multi will not work
             if len(output_columns) == 2:

@@ -244,7 +244,7 @@ def get_table_names(user_id):
     return df["table_name"].tolist()
 
 
-def get_latest_row_and_metadata(user_id) -> Tuple[pd.DataFrame, Dict[str, Any], str]:
+def get_latest_data_and_metadata(user_id) -> Tuple[pd.DataFrame, Dict[str, Any], str]:
     # Prepare the SELECT statement
     query = text(
         "SELECT csv_dict, columns_order, metadata, table_name FROM experiments WHERE user_id = :user_id ORDER BY timestamp DESC LIMIT 1"
@@ -269,16 +269,16 @@ def get_latest_row_and_metadata(user_id) -> Tuple[pd.DataFrame, Dict[str, Any], 
     return df, metadata, table_name
 
 
-def get_latest_row(user_id, table_name) -> pd.DataFrame:
+def get_latest_data_for_table(user_id, table_name) -> pd.DataFrame:
     # Prepare the SELECT statement
     query = text(
-        "SELECT csv_dict, columns_order FROM experiments WHERE user_id = :user_id AND table_name = :table_name ORDER BY timestamp DESC LIMIT 1"
+        "SELECT csv_dict, columns_order, metadata FROM experiments WHERE user_id = :user_id AND table_name = :table_name ORDER BY timestamp DESC LIMIT 1"
     )
 
     # Connect to the database
     with engine.connect() as conn:
         # Execute the SELECT statement
-        csv_dict, columns_order = conn.execute(
+        csv_dict, columns_order, metadata = conn.execute(
             query, {"user_id": user_id, "table_name": table_name}
         ).fetchone()
         conn.commit()
@@ -288,7 +288,7 @@ def get_latest_row(user_id, table_name) -> pd.DataFrame:
     df = pd.DataFrame(csv_dict)
     # Reorder the columns according to the stored order
     df = df[columns_order]
-    return df
+    return df, metadata
 
 
 def create_experiments_table() -> None:
@@ -464,14 +464,14 @@ def highlight_max_multi(df: pd.DataFrame, directions: Dict[str, str]):
 
     Parameters:
     df (pd.DataFrame): The DataFrame.
-    directions (dict): A dictionary mapping column names to either "min" or "max".
+    directions (dict): A dictionary mapping column names to either "minimize" or "maximize".
 
     Returns:
     df: The DataFrame with the maximum or minimum values in each column highlighted.
     """
 
     def highlight(s):
-        is_max = directions[s.name] == "max"
+        is_max = directions[s.name] == "maximize"
         return (
             ["background-color: yellow" if v == s.max() else "" for v in s]
             if is_max
@@ -834,8 +834,9 @@ def show_dashboard_multi(
     y_columns (list): The names of the output columns.
     y_directions (dict): A dictionary mapping column names to either "min" or "max".
     """
+    mapped_directions = dict(zip(y_columns, y_directions))
     # Highlight the max or min value in each output column
-    df_styled = highlight_max_multi(df, y_directions)
+    df_styled = highlight_max_multi(df, mapped_directions)
 
     st.dataframe(df_styled)
 
