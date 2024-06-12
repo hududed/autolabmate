@@ -1,15 +1,15 @@
 import streamlit as st
 from utils import (
     validate_inputs,
-    upload_metadata,
-    load_metadata,
+    upload_metadata_to_bucket,
     py_dict_to_r_list,
     save_to_local,
     upload_local_to_bucket,
     save_metadata,
     replace_value_with_nan,
     get_table_names,
-    get_latest_row,
+    get_latest_data_for_table,
+    get_latest_data_and_metadata,
     insert_data,
 )
 import pandas as pd
@@ -32,42 +32,36 @@ def main():
     st.warning("This section is still under development.")
 
     user_id = st.session_state.user_id
+
     table_names = get_table_names(user_id)
     if not table_names:
         st.write("No tables found.")
         return
 
-    default_table = (
-        st.session_state.table_name
-        if "table_name" in st.session_state
-        and st.session_state.table_name in table_names
-        else table_names[0]
-    )
+    batch_number = st.number_input("Enter batch number", min_value=2, value=2, step=1)
+
+    # Get the latest metadata
+    df, metadata, latest_table = get_latest_data_and_metadata(user_id, batch_number)
+
+    default_table = latest_table
     selected_table = st.selectbox(
         "Select a table", table_names, index=table_names.index(default_table)
     )
+
+    if selected_table != default_table:
+        df, metadata = get_latest_data_for_table(user_id, selected_table, batch_number)
     if selected_table:
         st.write("Loading data from previous batch: ")
-        df = get_latest_row(user_id, selected_table)
+        # df = get_latest_row(user_id, selected_table)
         st.dataframe(df)
 
-        # Query user for batch number with st.number_input and save as batch_number
-        batch_number = st.number_input(
-            "Enter batch number", min_value=2, value=2, step=1
-        )
-        try:
-            # Try to load the metadata
-            metadata = load_metadata(user_id, selected_table, batch_number - 1)
-        except FileNotFoundError:
-            # If a FileNotFoundError is raised, display a message and return
-            st.write(
-                f"No metadata found for table {selected_table}, and previous batch {batch_number - 1}."
-            )
-            return
-
-        # st.write("Loading metadata from previous batch: ")
         with st.expander("Show metadata from previous batch", expanded=False):
-            st.write(metadata)
+            keys_to_remove = ["user_id", "bucket_name"]
+            metadata_for_display = {
+                k: v for k, v in metadata.items() if k not in keys_to_remove
+            }
+            st.write(metadata_for_display)
+        print(metadata)
 
         bucket_name = metadata["bucket_name"]
         parameter_ranges = metadata["parameter_ranges"]
@@ -389,7 +383,7 @@ def main():
 
                 metadata["batch_number"] = batch_number
 
-                upload_metadata(metadata, batch_number)
+                upload_metadata_to_bucket(metadata, batch_number)
 
                 # Convert R data frame to pandas data frame
                 df_no_preds = ro.conversion.get_conversion().rpy2py(data_no_preds)
@@ -437,7 +431,9 @@ def main():
                 )
 
                 try:
-                    insert_data(selected_table, st.session_state.new_data, user_id)
+                    insert_data(
+                        selected_table, st.session_state.new_data, user_id, metadata
+                    )
 
                     st.write(
                         "Data uploaded successfully! Head to `dashboard` to see your data!"
@@ -448,19 +444,6 @@ def main():
                 st.dataframe(df_no_preds)
                 st.session_state.update_clicked = False
                 st.session_state.button_start_ml = False
-
-                st.session_state.metadata["X_columns"] = list(
-                    st.session_state.metadata["parameter_info"].keys()
-                )
-
-                # Extract output_column_names and directions
-                output_column_names = st.session_state.metadata["output_column_names"]
-                directions = st.session_state.metadata["directions"]
-
-                # Combine output_column_names and directions
-                st.session_state.metadata["directions"] = dict(
-                    zip(output_column_names, directions)
-                )
 
                 st.write(
                     "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"

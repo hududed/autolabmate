@@ -244,24 +244,51 @@ def get_table_names(user_id):
     return df["table_name"].tolist()
 
 
-def get_latest_data_and_metadata(user_id) -> Tuple[pd.DataFrame, Dict[str, Any], str]:
+def get_latest_data_and_metadata(
+    user_id: str, batch_number: int = None
+) -> Tuple[pd.DataFrame, Dict[str, Any], str]:
     # Prepare the SELECT statement
     query = text(
-        "SELECT csv_dict, columns_order, metadata, table_name FROM experiments WHERE user_id = :user_id ORDER BY timestamp DESC LIMIT 1"
+        "SELECT csv_dict, columns_order, metadata, table_name FROM experiments WHERE user_id = :user_id ORDER BY timestamp DESC"
     )
 
     # Connect to the database
     with engine.connect() as conn:
         # Execute the SELECT statement
-        csv_dict, columns_order, metadata, table_name = conn.execute(
-            query, {"user_id": user_id}
-        ).fetchone()
+        result = conn.execute(query, {"user_id": user_id})
+        # Get the column names
+        keys = result.keys()
+        # Convert the result to a list of dictionaries
+        rows = [dict(zip(keys, row)) for row in result]
         conn.commit()
         conn.close()
 
-    # Convert the metadata from a JSON string to a dictionary if necessary
-    if metadata is None:
-        metadata = {}
+    # Filter the rows based on the batch_number
+    if batch_number is not None:
+        rows = [
+            row
+            for row in rows
+            if (
+                (
+                    json.loads(row["metadata"])
+                    if isinstance(row["metadata"], str)
+                    else row["metadata"]
+                )
+                or {}
+            ).get("batch_number")
+            == batch_number - 1
+        ]
+
+    if rows:
+        csv_dict, columns_order, metadata, table_name = (
+            rows[0]["csv_dict"],
+            rows[0]["columns_order"],
+            rows[0]["metadata"],
+            rows[0]["table_name"],
+        )
+    else:
+        csv_dict, columns_order, metadata, table_name = (None, None, None, None)
+
     # Load the result into a DataFrame
     df = pd.DataFrame(csv_dict)
     # Reorder the columns according to the stored order
@@ -269,21 +296,49 @@ def get_latest_data_and_metadata(user_id) -> Tuple[pd.DataFrame, Dict[str, Any],
     return df, metadata, table_name
 
 
-def get_latest_data_for_table(user_id, table_name) -> pd.DataFrame:
+def get_latest_data_for_table(
+    user_id: str, table_name: str, batch_number: int = None
+) -> pd.DataFrame:
     # Prepare the SELECT statement
     query = text(
-        "SELECT csv_dict, columns_order, metadata FROM experiments WHERE user_id = :user_id AND table_name = :table_name ORDER BY timestamp DESC LIMIT 1"
+        "SELECT csv_dict, columns_order, metadata FROM experiments WHERE user_id = :user_id AND table_name = :table_name ORDER BY timestamp DESC"
     )
 
     # Connect to the database
     with engine.connect() as conn:
         # Execute the SELECT statement
-        csv_dict, columns_order, metadata = conn.execute(
-            query, {"user_id": user_id, "table_name": table_name}
-        ).fetchone()
+        result = conn.execute(query, {"user_id": user_id, "table_name": table_name})
+        # Get the column names
+        keys = result.keys()
+        # Convert the result to a list of dictionaries
+        rows = [dict(zip(keys, row)) for row in result]
         conn.commit()
         conn.close()
 
+    # Filter the rows based on the batch_number
+    if batch_number is not None:
+        rows = [
+            row
+            for row in rows
+            if (
+                (
+                    json.loads(row["metadata"])
+                    if isinstance(row["metadata"], str)
+                    else row["metadata"]
+                )
+                or {}
+            ).get("batch_number")
+            == batch_number - 1
+        ]
+
+    if rows:
+        csv_dict, columns_order, metadata = (
+            rows[0]["csv_dict"],
+            rows[0]["columns_order"],
+            rows[0]["metadata"],
+        )
+    else:
+        csv_dict, columns_order, metadata = (None, None, None)
     # Load the result into a DataFrame
     df = pd.DataFrame(csv_dict)
     # Reorder the columns according to the stored order
@@ -834,9 +889,8 @@ def show_dashboard_multi(
     y_columns (list): The names of the output columns.
     y_directions (dict): A dictionary mapping column names to either "min" or "max".
     """
-    mapped_directions = dict(zip(y_columns, y_directions))
     # Highlight the max or min value in each output column
-    df_styled = highlight_max_multi(df, mapped_directions)
+    df_styled = highlight_max_multi(df, y_directions)
 
     st.dataframe(df_styled)
 
@@ -914,7 +968,7 @@ def train_model_multi(df: pd.DataFrame, rng: int = rng):
     return model1, model2
 
 
-def get_user_inputs(df: pd.DataFrame):
+def get_user_inputs(df: pd.DataFrame) -> tuple:
     # user input batch number through number_input, default to 1
     batch_number = st.number_input("Enter batch number", min_value=1, value=1, step=1)
 
@@ -924,27 +978,24 @@ def get_user_inputs(df: pd.DataFrame):
     # Get output column names
     if optimization_type == "single":
         output_column_names = [df.columns[-1]]
-        directions = [
-            st.selectbox("Select optimization direction", ["minimize", "maximize"])
-        ]
+        directions = {
+            column: st.selectbox(
+                f"Select optimization direction for {column}",
+                ["minimize", "maximize"],
+            )
+            for column in output_column_names
+        }
     elif optimization_type == "multi":
         output_column_names = df.columns[-2:].tolist()
-        directions = []
-        for column in output_column_names:
-            directions.append(
-                st.selectbox(
-                    f"Select optimization direction for {column}",
-                    ["minimize", "maximize"],
-                )
+        directions = {
+            column: st.selectbox(
+                f"Select optimization direction for {column}",
+                ["minimize", "maximize"],
             )
+            for column in output_column_names
+        }
 
-    # direction = st.selectbox("Select optimization direction", ["minimize", "maximize"])
     print(df)
-    # # Get output column names
-    # if optimization_type == "single":
-    #     output_column_names = [df.columns[-1]]
-    # elif optimization_type == "multi":
-    #     output_column_names = df.columns[-2:]
 
     # Get number of parameters
     num_parameters = len(df.columns) - len(output_column_names)
@@ -957,7 +1008,6 @@ def get_user_inputs(df: pd.DataFrame):
         value=len(df),
     )
 
-    # Get parameter info
     parameter_info = df.dtypes[: -len(output_column_names)].to_dict()
     # Define a mapping from pandas dtypes to your desired types
     dtype_mapping = {"int64": "integer", "float64": "float", "O": "object"}
@@ -1043,7 +1093,7 @@ def display_dictionary(
     num_random_lines: int,
     parameter_info: Dict[str, Any],
     parameter_ranges: tuple,
-    direction: str,
+    directions: Dict[str, Any],
     user_id: str,
     to_nearest: float,
     metadata: Dict[str, Any],
@@ -1063,7 +1113,7 @@ def display_dictionary(
             "parameter_ranges": parameter_ranges,
             "learner": "regr.ranger",
             "acquisition_function": "ei",
-            "directions": direction,
+            "directions": directions,
             "bucket_name": bucket_name,
             "user_id": user_id,
             "to_nearest": to_nearest,

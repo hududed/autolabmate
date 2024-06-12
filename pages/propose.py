@@ -11,6 +11,7 @@ from utils import (
     replace_value_with_nan,
     get_table_names,
     get_latest_data_and_metadata,
+    get_latest_data_for_table,
     insert_data,
 )
 import rpy2.robjects as ro
@@ -49,7 +50,7 @@ def main():
     seed = st.number_input("Enter a seed", value=42, step=1)
 
     if selected_table != default_table:
-        df, metadata, latest_table = get_latest_data_and_metadata(user_id)
+        df, metadata = get_latest_data_for_table(user_id, selected_table)
 
     if selected_table:
         (
@@ -64,7 +65,7 @@ def main():
             to_nearest,
         ) = get_user_inputs(df)
 
-        # Add validate button
+        # TODO: If batch 2 already uploaded, repeating batch 1 DOES NOT overwrite batch 2 but continue as if its batch 3
         if st.button("Validate"):
             validation_errors = validate_inputs(df, parameter_ranges)
 
@@ -281,17 +282,9 @@ def main():
                 codomain = ParamSet$new(params = list())
 
                 # Loop through metadata$output_column_names
-                for (i in seq_along(metadata$output_column_names)) {
-                    output_name <- metadata$output_column_names[i]
+                for (output_name in names(metadata$directions)) {
                     print(paste("Adding output to codomain with id: ", output_name))
-                    direction <- toString(metadata$directions[i])
-
-                    # Map 'min' and 'max' to 'minimize' and 'maximize'
-                    if (direction == "min") {
-                        direction <- "minimize"
-                    } else if (direction == "max") {
-                        direction <- "maximize"
-                    }
+                    direction <- toString(metadata$directions[[output_name]])
 
                     # Add the output to the codomain
                     codomain$add(ParamDbl$new(id = output_name, tags = direction))
@@ -436,14 +429,6 @@ def main():
 
                 print(df_no_preds)
                 st.write(df_no_preds)
-
-                metadata["X_columns"] = list(metadata["parameter_info"].keys())
-                # Extract output_column_names and directions
-                output_column_names = metadata["output_column_names"]
-                directions = metadata["directions"]
-
-                # Combine output_column_names and directions
-                metadata["directions"] = dict(zip(output_column_names, directions))
 
                 st.write(
                     "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"
