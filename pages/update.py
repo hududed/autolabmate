@@ -273,6 +273,9 @@ def main():
                         set.seed(metadata$seed)
                         result <- load_archive_data(metadata)
                         data_with_preds <- load_predicted_data(metadata)
+                        
+                        # Ensure data_with_preds is a data.table
+                        data_with_preds <- as.data.table(data_with_preds)
 
                         print("Data with preds: ")
                         print(data_with_preds)
@@ -287,6 +290,19 @@ def main():
                         
                         print("Tail Data: ")
                         print(data)
+
+                        # Adjust the loop to update the last metadata$num_random_lines rows of data_with_preds
+                        for (output_column_name in metadata$output_column_names) {
+                            if (output_column_name %in% names(data_with_preds)) {
+                                # Calculate the starting row index for the last metadata$num_random_lines rows
+                                start_row <- max(1, nrow(data_with_preds) - as.integer(metadata$num_random_lines) + 1)
+                                # Update the specified rows in data_with_preds
+                                data_with_preds[(start_row:nrow(data_with_preds)), (output_column_name) := full_data[(start_row:nrow(data_with_preds)), ..output_column_name]]
+                            }
+                        }
+
+                        print("Updated data_with_preds: ")
+                        print(data_with_preds)
 
                         archive <- result[[1]]
                         acq_function <- result[[2]]
