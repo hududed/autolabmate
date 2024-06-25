@@ -18,16 +18,15 @@ def main():
 
     if "table_name" not in st.session_state:
         st.session_state.table_name = ""
-    if "metadata" not in st.session_state:
-        st.session_state.metadata = {
-            "directions": {},
-            "table_name": "",
-            "X_columns": [],
-            "output_column_names": [],
-        }
     if "update_clicked" not in st.session_state:
         st.session_state.update_clicked = False
     user_id = st.session_state.user_id
+    metadata = {
+        "directions": {},
+        "table_name": "",
+        "X_columns": [],
+        "output_column_names": [],
+    }
 
     st.write("Please upload your first batch CSV file.")
     file = st.file_uploader("Upload first batch CSV", type="csv")
@@ -73,17 +72,13 @@ def main():
                     key=column,
                 )
 
-            # TODO: save metadata to database to avoid session, e.g. switching tables (highlights wont work)
-            # Initialize metadata in session state if it doesn't exist
-            if "metadata" not in st.session_state:
-                st.session_state.metadata = {}
             # Add y_directions to metadata
-            st.session_state.metadata["directions"] = y_directions
+            metadata["directions"] = y_directions
 
             # Add table_name, X_columns, and y_columns to metadata
-            st.session_state.metadata["table_name"] = st.session_state.table_name
-            st.session_state.metadata["X_columns"] = X_columns
-            st.session_state.metadata["output_column_names"] = y_columns
+            metadata["table_name"] = st.session_state.table_name
+            metadata["X_columns"] = X_columns
+            metadata["output_column_names"] = y_columns
 
             # Rearrange the DataFrame
             df = df[X_columns + y_columns]
@@ -97,7 +92,7 @@ def main():
 
             st.session_state.update_clicked = True
 
-            insert_data(table_name, df, user_id, st.session_state.metadata)
+            insert_data(table_name, df, user_id, metadata)
 
             bucket_name = "test-bucket"
             file.seek(0)  # Reset the file pointer to the beginning
