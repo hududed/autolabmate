@@ -2,7 +2,8 @@ import streamlit as st
 import supabase
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, text, inspect, MetaData, Table
-import os, re
+import os
+import re
 import pandas as pd
 import numpy as np
 from numpy.random import RandomState
@@ -19,6 +20,10 @@ import simplejson
 from datetime import datetime
 import rpy2.robjects as ro
 from tenacity import retry, stop_after_attempt, wait_fixed
+from io import BytesIO
+from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.figure import Figure
+import itertools
 
 from sklearn.inspection import partial_dependence
 from sklearn.inspection import PartialDependenceDisplay
@@ -551,6 +556,248 @@ def plot_output(df, col2):
         col2.altair_chart(chart)
 
 
+def plot_output_with_confidence(
+    df: pd.DataFrame, output_columns: list[str], metadata: Dict[str, Any]
+):
+    """
+    Plots raw output values as dots, mean values as crosses, and confidence intervals as filled areas
+    for each output column in a DataFrame. Adds hover functionality to reveal input metadata values.
+
+    Parameters:
+    - df: DataFrame containing the data.
+    - output_columns: List of output column names to plot.
+    - metadata: Dictionary containing metadata for hover information.
+    """
+    X_columns = metadata[
+        "X_columns"
+    ]  # Assuming metadata contains a key 'X_columns' for hover data
+
+    for output in output_columns:
+        fig = go.Figure()
+
+        # Variables to ensure legend is only shown once for each type
+        show_legend_for_raw = True
+        show_legend_for_mean = True
+        show_legend_for_confidence = True
+
+        # Define mean and standard error column names
+        mean_col = f"{output}_mean"
+        se_col = f"{output}_se"
+
+        for i, row in df.iterrows():
+            hover_text = "<br>".join([f"{col}: {row[col]}" for col in X_columns])
+            fig.add_trace(
+                go.Scatter(
+                    x=[i],
+                    y=[row[output]],
+                    mode="markers+lines",
+                    marker=dict(size=10),
+                    text=hover_text,
+                    hoverinfo="text",
+                    name="Raw Output",
+                    showlegend=show_legend_for_raw,
+                )
+            )
+            show_legend_for_raw = (
+                False  # Only show legend for the first raw output trace
+            )
+
+        if mean_col in df.columns and se_col in df.columns:
+            df_not_null = df.dropna(subset=[mean_col, se_col])
+
+            # Line plot for mean values as crosses
+            fig.add_trace(
+                go.Scatter(
+                    x=df_not_null.index,
+                    y=df_not_null[mean_col],
+                    mode="markers",
+                    marker_symbol="x",
+                    marker_size=12,
+                    name="Mean Predicted Output",
+                    hoverinfo="skip",
+                    showlegend=show_legend_for_mean,
+                )
+            )
+            show_legend_for_mean = False  # Only show legend for the first mean trace
+
+            # Fill between for confidence interval
+            fig.add_trace(
+                go.Scatter(
+                    x=df_not_null.index,
+                    y=df_not_null[mean_col] - df_not_null[se_col],
+                    mode="lines",
+                    line=dict(width=0),
+                    showlegend=False,
+                    hoverinfo="skip",
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=df_not_null.index,
+                    y=df_not_null[mean_col] + df_not_null[se_col],
+                    mode="lines",
+                    fill="tonexty",
+                    line=dict(width=0),
+                    fillcolor="rgba(128, 128, 128, 0.2)",
+                    name="Confidence Interval",
+                    hoverinfo="skip",
+                    showlegend=show_legend_for_confidence,
+                )
+            )
+            show_legend_for_confidence = (
+                False  # Only show legend for the first confidence interval trace
+            )
+
+        fig.update_layout(
+            title=f"{output} as a function of iteration",
+            xaxis_title="Iteration",
+            yaxis_title=output,
+        )
+
+        st.plotly_chart(fig)
+
+
+def report_output_with_confidence(df: pd.DataFrame, output: str):
+    plt.figure(figsize=(10, 6))
+    # Scatter plot for raw output values as dots
+    plt.scatter(df.index, df[output], label=f"Raw {output}", marker="o")
+    plt.plot(df.index, df[output], label=f"Raw {output} (line)", alpha=0.5)
+
+    # Check for mean and se columns and plot if they exist
+    mean_col = f"{output}_mean"
+    se_col = f"{output}_se"
+    if mean_col in df.columns and se_col in df.columns:
+        df_not_null = df.dropna(subset=[mean_col, se_col])
+        plt.plot(
+            df_not_null.index,
+            df_not_null[mean_col],
+            "x",
+            label=f"Mean {output}",
+            color="red",
+        )
+        lower_bound = df_not_null[mean_col] - df_not_null[se_col]
+        upper_bound = df_not_null[mean_col] + df_not_null[se_col]
+        plt.fill_between(
+            df_not_null.index,
+            lower_bound,
+            upper_bound,
+            color="gray",
+            alpha=0.2,
+            label=f"Confidence Interval ({output})",
+        )
+
+    plt.title(f"{output} as a function of iteration")
+    plt.xlabel("Iteration")
+    plt.ylabel(output)
+    plt.legend()
+    return plt.gcf()
+
+
+def create_dashboard_report_multi(
+    df: pd.DataFrame,
+    df_with_preds: pd.DataFrame,
+    models: Tuple[RandomForestRegressor, RandomForestRegressor],
+    output_columns: list[str],
+    metadata: Dict[str, Any],
+):
+    """
+    Compiles various plots into a single PDF report.
+    """
+    buf = BytesIO()
+    with PdfPages(buf) as pdf:
+        # Pairplot
+        fig = report_pairplot(df)
+        pdf.savefig(fig)
+        plt.close(fig)
+        st.info("Pairplot created")
+
+        # Generate all unique pairs of features
+        feature_pairs = list(itertools.combinations(metadata["X_columns"], 2))
+
+        # Output vs Iteration Plot
+        for model, output_name in zip(models, output_columns):
+            fig = report_output_with_confidence(df_with_preds, output_name)
+            pdf.savefig(fig)
+            plt.close(fig)
+            st.info("Output vs Iteration plot created")
+
+            # Single PDP (example)
+            fig = report_pdp(df, model, output_name, n_outputs=2)
+            pdf.savefig(fig)
+            plt.close(fig)
+            st.info("Single PDP plot created")
+
+            # 2-way PDP (example)
+            for pair in feature_pairs:
+                fig = plot_interaction_pdp(
+                    df,
+                    [pair],
+                    model,
+                    output_name,
+                    n_outputs=2,
+                    overlay=True,
+                    for_report=True,
+                )
+                pdf.savefig(fig)
+                plt.close(fig)
+                st.info("2-way PDP plot created")
+
+    buf.seek(0)
+    return buf
+
+
+def create_matplotlib_plot(df: pd.DataFrame, output_columns: list[str]):
+    """
+    Generates a PDF containing plots for each output column in the DataFrame.
+
+    Parameters:
+    - df: DataFrame containing the data.
+    - output_columns: List of output column names to plot.
+    - metadata: Dictionary containing additional information for plotting.
+    """
+    # Start a PDF buffer
+    buf = BytesIO()
+    with PdfPages(buf) as pdf:
+        for output in output_columns:
+            plt.figure(figsize=(10, 6))
+            # Scatter plot for raw output values as dots
+            plt.scatter(df.index, df[output], label=f"Raw {output}", marker="o")
+            plt.plot(df.index, df[output], label=f"Raw {output} (line)", alpha=0.5)
+
+            # Check for mean and se columns and plot if they exist
+            mean_col = f"{output}_mean"
+            se_col = f"{output}_se"
+            if mean_col in df.columns and se_col in df.columns:
+                df_not_null = df.dropna(subset=[mean_col, se_col])
+                plt.plot(
+                    df_not_null.index,
+                    df_not_null[mean_col],
+                    "x",
+                    label=f"Mean {output}",
+                    color="red",
+                )
+                lower_bound = df_not_null[mean_col] - df_not_null[se_col]
+                upper_bound = df_not_null[mean_col] + df_not_null[se_col]
+                plt.fill_between(
+                    df_not_null.index,
+                    lower_bound,
+                    upper_bound,
+                    color="gray",
+                    alpha=0.2,
+                    label=f"Confidence Interval ({output})",
+                )
+
+            plt.title(f"{output} as a function of iteration")
+            plt.xlabel("Iteration")
+            plt.ylabel(output)
+            plt.legend()
+            pdf.savefig()  # Save the current figure into the PDF
+            plt.close()
+
+    buf.seek(0)
+    return buf
+
+
 def plot_pairplot_old(df):
     sns.set_theme(context="talk")
     pairplot_fig = sns.pairplot(df, diag_kind="kde")
@@ -634,6 +881,43 @@ def plot_pairplot(df):
     fig.update_layout(title="Pairplot of the DataFrame", title_x=0.4)
 
     st.plotly_chart(fig)
+
+
+def report_pairplot(df: pd.DataFrame) -> Figure:
+    # Select only numeric columns
+    df_numeric = df.select_dtypes(include=[np.number])
+    variables = df_numeric.columns
+    n_vars = len(variables)
+
+    # Initialize the figure
+    fig, axs = plt.subplots(n_vars, n_vars, figsize=(n_vars * 2.5, n_vars * 2.5))
+
+    # Loop through rows and columns for plotting
+    for i, var_i in enumerate(variables):
+        for j, var_j in enumerate(variables):
+            ax = axs[i, j]
+
+            if i == j:  # Diagonal: Plot KDE
+                sns.kdeplot(df_numeric[var_i], ax=ax, shade=True)
+                ax.set_ylabel("")  # Remove y-axis label for KDE plots
+            else:  # Off-diagonal: Plot scatter
+                ax.scatter(df_numeric[var_j], df_numeric[var_i], alpha=0.5)
+
+            # Set labels
+            if i == n_vars - 1:  # Bottom row
+                ax.set_xlabel(var_j)
+            else:  # Hide x-axis labels for other rows
+                ax.set_xlabel("")
+                ax.set_xticks([])
+
+            if j == 0:  # First column
+                ax.set_ylabel(var_i)
+            else:  # Hide y-axis labels for other columns
+                ax.set_ylabel("")
+                ax.set_yticks([])
+
+    plt.tight_layout()
+    return fig
 
 
 def plot_pdp_old(df):
@@ -743,6 +1027,53 @@ def plot_pdp(
     st.plotly_chart(fig)
 
 
+def report_pdp(
+    df: pd.DataFrame, model: RandomForestRegressor, output_name: str, n_outputs: int = 1
+):
+    # Select numeric features, excluding target columns
+    X = df.select_dtypes(include=[np.number]).iloc[:, :-n_outputs]
+    features = X.columns
+
+    # Initialize figure
+    fig, axs = plt.subplots(1, len(features), figsize=(5 * len(features), 4))
+    if len(features) == 1:
+        axs = [axs]  # Ensure axs is iterable for a single subplot
+
+    # Plot PDP and ICE for each feature
+    for i, feature in enumerate(features):
+        ax = axs[i]
+        pdp_results = partial_dependence(model, X, features=[feature], kind="both")
+        pdp_values = pdp_results["average"][0]
+        ice_values = pdp_results["individual"][0]
+        feature_values = pdp_results["values"][0]
+
+        # PDP line
+        ax.plot(
+            feature_values,
+            pdp_values,
+            label="PDP",
+            color="orange",
+            linewidth=2,
+            linestyle="--",
+        )
+
+        # ICE lines
+        for ice_line in ice_values:
+            ax.plot(feature_values, ice_line, color="grey", linewidth=0.5, alpha=0.3)
+
+        ax.set_title(feature)
+        ax.set_xlabel("Feature Value")
+        ax.set_ylabel("Partial Dependence")
+
+    # Adjust layout and add legend
+    fig.tight_layout()
+    handles, labels = ax.get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=2)
+
+    fig.suptitle(f"PDP and ICE for {output_name}", fontsize=16, y=1.05)
+    return fig
+
+
 def plot_interaction_pdp(
     df: pd.DataFrame,
     features_list: list[Tuple[str, str]],
@@ -750,6 +1081,7 @@ def plot_interaction_pdp(
     output_name: str = "",  # TODO: dynamic for both single and multi
     n_outputs: int = 1,
     overlay: bool = None,
+    for_report: bool = False,
 ):
     """
     Plot a 2-way interaction PDP for each pair of features in the list.
@@ -792,10 +1124,13 @@ def plot_interaction_pdp(
             f"2-way PDP between {features} for {output_name} using random forest",
             fontsize=16,
         )
-        plt.show()
 
         # Display the plot in Streamlit
-        st.pyplot(plt)
+        if not for_report:
+            plt.show()
+            st.pyplot(plt)
+        else:
+            pass
 
 
 def feature_importance(df: pd.DataFrame, model: RandomForestRegressor):

@@ -405,6 +405,9 @@ def main():
                 df_no_preds = ro.conversion.get_conversion().rpy2py(data_no_preds)
                 df_with_preds = ro.conversion.get_conversion().rpy2py(data_with_preds)
 
+                num_rows_original = len(st.session_state.new_data)
+                df_with_preds_subset = df_with_preds.iloc[:num_rows_original]
+
                 # Replace -2147483648 with np.nan if -2147483648 exists in the DataFrame
                 replace_value_with_nan(df_no_preds)
                 replace_value_with_nan(df_with_preds)
@@ -447,9 +450,7 @@ def main():
                 )
 
                 try:
-                    insert_data(
-                        selected_table, st.session_state.new_data, user_id, metadata
-                    )
+                    insert_data(selected_table, df_with_preds_subset, user_id, metadata)
 
                     st.write(
                         "Data uploaded successfully! Head to `dashboard` to see your data!"

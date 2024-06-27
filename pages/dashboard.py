@@ -1,3 +1,4 @@
+from typing import Any, Dict
 import streamlit as st
 from utils import (
     show_dashboard,
@@ -12,7 +13,10 @@ from utils import (
     train_model_multi,
     feature_importance,
     feature_importance_multi,
+    plot_output_with_confidence,
+    create_dashboard_report_multi,
 )
+
 
 st.title("Dashboard")
 
@@ -30,7 +34,12 @@ def main():
         return
 
     # Get the latest metadata
-    df, metadata, latest_table = get_latest_data_and_metadata(user_id)
+    df_with_preds, metadata, latest_table = get_latest_data_and_metadata(user_id)
+
+    # Combine X_columns and output_column_names from metadata
+    columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
+    # Subset df_with_preds to only include the relevant columns
+    df = df_with_preds[columns_to_keep]
 
     default_table = latest_table
     selected_table = st.selectbox(
@@ -66,8 +75,8 @@ def main():
             # Once selected, the tuple of two features is added as pair_param
             pair_param = [tuple(selected_features)]
 
-            directions = metadata["directions"]
-            output_columns = metadata["output_column_names"]
+            directions: Dict[str, Any] = metadata["directions"]
+            output_columns: list[str] = metadata["output_column_names"]
 
             # TODO: save metadata to db, currently switching between single and multi will not work
             if len(output_columns) == 2:
@@ -86,11 +95,25 @@ def main():
                     output_columns,
                     overlay=True,
                 )
+                plot_output_with_confidence(df_with_preds, output_columns, metadata)
+
             else:
                 model = train_model(df)
                 show_dashboard(df, model, directions, output_columns)
                 feature_importance(df, model)
                 show_interaction_pdp(df, pair_param, model, overlay=True)
+
+            # Add the button for downloading the Matplotlib plot
+            if st.button("Generate Summary Report for Download"):
+                buf = create_dashboard_report_multi(
+                    df, df_with_preds, models, output_columns, metadata
+                )
+                st.download_button(
+                    label="Download Matplotlib Plot as PDF",
+                    data=buf,
+                    file_name="confidence_plot.pdf",
+                    mime="application/pdf",
+                )
 
 
 if __name__ == "__main__":
