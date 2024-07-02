@@ -1094,6 +1094,8 @@ def plot_interaction_pdp(
     # Separate the features and the target
     X = df.select_dtypes(include=[np.number]).iloc[:, :-n_outputs]
 
+    figs = []
+
     for features in features_list:
         # Unpack the features tuple
         feature1, feature2 = features
@@ -1110,27 +1112,28 @@ def plot_interaction_pdp(
             st.warning(f"The selected features {features} must be numeric.")
             continue
 
+        fig, ax = plt.subplots(figsize=(8, 6))
         # Compute the interaction PDP
         display = PartialDependenceDisplay.from_estimator(
-            model, X, [features], kind="average", random_state=rng
+            model, X, [features], kind="average", random_state=rng, ax=ax
         )
 
         # Overlay the actual feature pair points if overlay is True
         if overlay:
-            plt.scatter(df[feature1], df[feature2], c="r", s=30, edgecolor="k")
+            ax.scatter(df[feature1], df[feature2], c="r", s=30, edgecolor="k", zorder=5)
 
-        # Plot the interaction PDP
-        display.figure_.suptitle(
-            f"2-way PDP between {features} for {output_name} using random forest",
+        ax.set_title(
+            f"2-way PDP between {features} for {output_name} using RandomForest",
             fontsize=16,
         )
 
+        figs.append(fig)
+
         # Display the plot in Streamlit
         if not for_report:
-            plt.show()
-            st.pyplot(plt)
-        else:
-            pass
+            st.pyplot(fig)
+    if for_report:
+        return figs
 
 
 def feature_importance(df: pd.DataFrame, model: RandomForestRegressor):

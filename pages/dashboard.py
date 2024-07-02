@@ -111,7 +111,7 @@ def main():
                 st.download_button(
                     label="Download Matplotlib Plot as PDF",
                     data=buf,
-                    file_name="confidence_plot.pdf",
+                    file_name="summary_report.pdf",
                     mime="application/pdf",
                 )
 
