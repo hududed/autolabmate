@@ -729,7 +729,7 @@ def create_dashboard_report_multi(
 
             # 2-way PDP (example)
             for pair in feature_pairs:
-                fig = plot_interaction_pdp(
+                figures = plot_interaction_pdp(
                     df,
                     [pair],
                     model,
@@ -738,8 +738,9 @@ def create_dashboard_report_multi(
                     overlay=True,
                     for_report=True,
                 )
-                pdf.savefig(fig)
-                plt.close(fig)
+                for fig in figures:
+                    pdf.savefig(fig)
+                    plt.close(fig)
                 st.info("2-way PDP plot created")
 
     buf.seek(0)
@@ -898,7 +899,7 @@ def report_pairplot(df: pd.DataFrame) -> Figure:
             ax = axs[i, j]
 
             if i == j:  # Diagonal: Plot KDE
-                sns.kdeplot(df_numeric[var_i], ax=ax, shade=True)
+                sns.kdeplot(df_numeric[var_i], ax=ax, fill=True)
                 ax.set_ylabel("")  # Remove y-axis label for KDE plots
             else:  # Off-diagonal: Plot scatter
                 ax.scatter(df_numeric[var_j], df_numeric[var_i], alpha=0.5)
