@@ -48,19 +48,58 @@ def login():
             st.session_state.authentication_status = False
 
 
-# Sign-up form
 def signup():
+    if "retry_count" not in st.session_state:
+        st.session_state.retry_count = 0
+    if "retry_delay" not in st.session_state:
+        st.session_state.retry_delay = 1  # Initial delay between retries in seconds
+
     st.header("Sign Up")
     email = st.text_input("Email")
     password = st.text_input("Password", type="password")
 
     if st.button("Sign Up"):
-        # Insert user details into the database
-        user_data = supabase_client.auth.sign_up({"email": email, "password": password})
-        if user_data:
-            st.success("Successfully registered!")
-        else:
-            st.error("Registration failed!")
+        try:
+            # Attempt to sign up the user
+            user_data = supabase_client.auth.sign_up(
+                {"email": email, "password": password}
+            )
+            if user_data:
+                st.success("Successfully registered!")
+                st.session_state.retry_count = 0  # Reset retry count on success
+                return
+            else:
+                st.error("Registration failed!")
+        except Exception as e:
+            if "429" in str(e):
+                if st.session_state.retry_count < 3:  # Maximum number of retries
+                    st.warning(
+                        f"Too many requests. Please wait {st.session_state.retry_delay} seconds before trying again."
+                    )
+                    st.session_state.retry_count += 1
+                    st.session_state.retry_delay *= 2  # Exponential backoff
+                else:
+                    st.error(
+                        "Failed to register after multiple attempts. Please try again later."
+                    )
+            else:
+                st.error(f"An error occurred: {e}")
+
+
+# # Sign-up form
+# def signup():
+#     st.header("Sign Up")
+#     email = st.text_input("Email")
+#     password = st.text_input("Password", type="password")
+
+#     if st.button("Sign Up"):
+#         # Insert user details into the database
+#         user_data = supabase_client.auth.sign_up({"email": email, "password": password})
+#         print(user_data)
+#         if user_data:
+#             st.success("Successfully registered!")
+#         else:
+#             st.error("Registration failed!")
 
 
 # Logout page

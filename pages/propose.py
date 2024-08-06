@@ -235,8 +235,9 @@ def main():
                 set.seed(metadata$seed)
                 data <- as.data.table(data) # data.csv is queried `table`
 
-                # retrieve this from metadata parameter_ranges
-                search_space <- ParamSet$new(params = list())
+                # Initialize a list to store parameters for search_space
+                search_space_list <- list()
+
                 # Loop through metadata$parameter_info
                 for (param_name in names(metadata$parameter_info)) {
                     # print(paste("Parameter name: ", param_name))
@@ -249,7 +250,7 @@ def main():
                     # Check if param_info is 'object', if so, no need to convert to numeric
                     print(paste("Adding parameter to search_space with id: ", param_name))
                     if (param_info == "object") {
-                        search_space$add(ParamFct$new(id = param_name, levels = param_range))
+                        search_space_list[[param_name]] <- p_fct(levels = param_range)
                         next
                     }
 
@@ -271,15 +272,17 @@ def main():
                     # Add the parameter to the search space
                     if (param_info == "float") {
                         values = seq(lower, upper, by=as.numeric(metadata$to_nearest))
-                        search_space$add(ParamDbl$new(id = param_name,
-                                                        lower = lower, upper = upper))
+                        search_space_list[[param_name]] <- p_dbl(lower = lower, upper = upper)
                     } else if (param_info == "integer") {
-                        search_space$add(ParamInt$new(id = param_name,
-                                                      lower = lower, upper = upper))
+                        search_space_list[[param_name]] <- p_int(lower = lower, upper = upper)
                     }
                 }
+
+                # Create the ParamSet for search_space using the ps() function
+                search_space <- do.call(ps, search_space_list)
+
                 # Initialize an empty ParamSet for the codomain
-                codomain = ParamSet$new(params = list())
+                codomain_list = list()
 
                 # Loop through metadata$output_column_names
                 for (output_name in names(metadata$directions)) {
@@ -287,10 +290,13 @@ def main():
                     direction <- toString(metadata$directions[[output_name]])
 
                     # Add the output to the codomain
-                    codomain$add(ParamDbl$new(id = output_name, tags = direction))
+                    codomain_list[[output_name]] <- p_dbl(tags = direction)
                 }
 
-                archive <- Archive$new(search_space = search_space, codomain = codomain)
+                # Create the ParamSet for codomain using the ps() function
+                codomain <- do.call(ps, codomain_list)
+
+                archive <- ArchiveBatch$new(search_space = search_space, codomain = codomain)
 
                 print(metadata$output_column_names)
 
