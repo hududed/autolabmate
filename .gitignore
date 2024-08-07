@@ -208,7 +208,7 @@ pip-selfcheck.json
 
 # R code
 *.R
-
+!install_packages.R
 # standalone app
 *darwin*
 
