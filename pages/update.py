@@ -41,7 +41,9 @@ def main():
     batch_number = st.number_input("Enter batch number", min_value=2, value=2, step=1)
 
     # Get the latest metadata
-    df, metadata, latest_table = get_latest_data_and_metadata(user_id, batch_number)
+    df_with_preds, metadata, latest_table = get_latest_data_and_metadata(user_id, batch_number)
+    columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
+    df = df_with_preds[columns_to_keep]
 
     default_table = latest_table
     selected_table = st.selectbox(
@@ -49,7 +51,9 @@ def main():
     )
 
     if selected_table != default_table:
-        df, metadata = get_latest_data_for_table(user_id, selected_table, batch_number)
+        df_with_preds, metadata = get_latest_data_for_table(user_id, selected_table, batch_number)
+        columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
+        df = df_with_preds[columns_to_keep]
     if selected_table:
         st.write("Loading data from previous batch: ")
         # df = get_latest_row(user_id, selected_table)

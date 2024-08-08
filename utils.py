@@ -1307,34 +1307,20 @@ def train_model_multi(df: pd.DataFrame, rng: int = rng):
     return model1, model2
 
 
-def get_user_inputs(df: pd.DataFrame) -> tuple:
+def get_user_inputs(df: pd.DataFrame, metadata: Dict[str, Any]) -> tuple:
     # user input batch number through number_input, default to 1
     batch_number = st.number_input("Enter batch number", min_value=1, value=1, step=1)
 
-    # Get optimization type
-    optimization_type = st.selectbox("Select optimization type", ["single", "multi"])
+    # print(metadata)
 
-    # Get output column names
-    if optimization_type == "single":
-        output_column_names = [df.columns[-1]]
-        directions = {
-            column: st.selectbox(
-                f"Select optimization direction for {column}",
-                ["minimize", "maximize"],
-            )
-            for column in output_column_names
-        }
-    elif optimization_type == "multi":
-        output_column_names = df.columns[-2:].tolist()
-        directions = {
-            column: st.selectbox(
-                f"Select optimization direction for {column}",
-                ["minimize", "maximize"],
-            )
-            for column in output_column_names
-        }
+     # Get optimization type with default from metadata
+    optimization_type = metadata["optimization_type"]
 
-    print(df)
+    # Get output column names and directions from metadata
+    output_column_names = metadata["output_column_names"]
+    directions = metadata["directions"]
+
+    # print(df)
 
     # Get number of parameters
     num_parameters = len(df.columns) - len(output_column_names)

@@ -39,7 +39,9 @@ def main():
         return
 
     # Get the latest metadata
-    df, metadata, latest_table = get_latest_data_and_metadata(user_id)
+    df_with_preds, metadata, latest_table = get_latest_data_and_metadata(user_id)
+    columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
+    df = df_with_preds[columns_to_keep]
 
     # Get the table name from the latest metadata
     default_table = latest_table
@@ -50,7 +52,9 @@ def main():
     seed = st.number_input("Enter a seed", value=42, step=1)
 
     if selected_table != default_table:
-        df, metadata = get_latest_data_for_table(user_id, selected_table)
+        df_with_preds, metadata = get_latest_data_for_table(user_id, selected_table)
+        columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
+        df = df_with_preds[columns_to_keep]
 
     if selected_table:
         (
@@ -63,7 +67,7 @@ def main():
             parameter_ranges,
             directions,
             to_nearest,
-        ) = get_user_inputs(df)
+        ) = get_user_inputs(df, metadata)
 
         # TODO: If batch 2 already uploaded, repeating batch 1 DOES NOT overwrite batch 2 but continue as if its batch 3
         if st.button("Validate"):
