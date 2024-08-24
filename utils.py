@@ -24,6 +24,7 @@ from io import BytesIO
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 import itertools
+import zipfile
 
 from sklearn.inspection import partial_dependence
 from sklearn.inspection import PartialDependenceDisplay
@@ -48,6 +49,20 @@ engine = create_engine(DATABASE_URL, echo=True)
 inspector = inspect(engine)
 
 
+def compress_files(files):
+    # Create an in-memory buffer to store the zip file
+    buffer = BytesIO()
+    
+    # Write the zip file to the buffer
+    with zipfile.ZipFile(buffer, "w") as zip:
+        for file in files:
+            zip.writestr(file['name'], file['content'])
+    
+    # Seek to the beginning of the buffer
+    buffer.seek(0)
+    
+    return buffer
+
 # Define routes
 def create_account(email, password):
     # Create new account
@@ -68,16 +83,9 @@ def upload_to_bucket(
     new_file_name = f"{user_id}/{table_name}/{batch_number}/{file_name}"
     print(new_file_name)
 
-    st.write(
-        f'Uploading file "{file_name}" to bucket "{bucket_name}" as "{new_file_name}"'
-    )
-
     try:
         # Upload file to bucket
         supabase_client.storage.from_(bucket_name).upload(new_file_name, file_content)
-        st.write(
-            f'Uploading file "{file_name}" to bucket "{bucket_name}" as "{new_file_name}"'
-        )
         st.write(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
     except Exception as e:
         if "Duplicate" in str(e):
@@ -196,9 +204,6 @@ def upload_local_to_bucket(
                 new_file_name, file_content
             )
             print(new_file_name)
-            st.write(
-                f'Uploading file "{file_name}" to bucket "{bucket_name}" as "{new_file_name}"'
-            )
             st.write(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
         except Exception as e:
             if "Duplicate" in str(e):
@@ -231,7 +236,6 @@ def upload_metadata_to_bucket(metadata, batch_number=1):
         metadata_content,
         batch_number,
     )
-
 
 def get_table_names(user_id):
     # Prepare the SELECT statement
@@ -479,6 +483,37 @@ def retrieve_bucket_files(bucket_name):
     print(files)
     return files
 
+def retrieve_and_download_files(bucket_name, user_id, table_name, batch_number=1, local_dir="./"):
+    """
+    Retrieve all files from the specified bucket and download them locally.
+    
+    Args:
+        bucket_name (str): The name of the bucket.
+        user_id (str): The user ID.
+        table_name (str): The table name.
+        batch_number (int): The batch number.
+        local_dir (str): The local directory to save the downloaded files.
+        
+    Returns:
+        list: A list of local file paths.
+    """
+    files = supabase_client.storage.from_(bucket_name).list(f"{user_id}/{table_name}/{batch_number}")
+    if not files:
+        raise Exception("No files to download")
+    
+    # print("Files listed in bucket: ", files)
+    downloaded_files = []
+    for file in files:
+        file_name = file['name']
+        response = supabase_client.storage.from_(bucket_name).download(f"{user_id}/{table_name}/{batch_number}/{file_name}")
+                
+        # Store the file name and content in a dictionary
+        downloaded_files.append({
+            "name": file_name,
+            "content": response
+        })
+    
+    return downloaded_files
 
 def create_query(table_name, pair_param=None):
     if pair_param:

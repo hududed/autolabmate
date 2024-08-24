@@ -16,6 +16,7 @@
 *.xml
 *.rds
 *-bucket/
+*.zip
 
 ### dotenv ###
 .env

@@ -1,18 +1,20 @@
 import streamlit as st
 from utils import (
-    get_user_inputs,
-    validate_inputs,
+    compress_files,
     display_dictionary,
-    upload_metadata_to_bucket,
-    save_metadata,
-    py_dict_to_r_list,
-    upload_local_to_bucket,
-    save_to_local,
-    replace_value_with_nan,
-    get_table_names,
     get_latest_data_and_metadata,
     get_latest_data_for_table,
+    get_user_inputs,
+    get_table_names,
     insert_data,
+    py_dict_to_r_list,
+    replace_value_with_nan,
+    retrieve_and_download_files, 
+    save_metadata,
+    save_to_local,
+    upload_local_to_bucket,
+    upload_metadata_to_bucket,
+    validate_inputs,
 )
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
@@ -29,6 +31,9 @@ def main():
     # Reset st.session_state.button_start_ml to False when the page is loaded
     if "button_start_ml" not in st.session_state or st.session_state.button_start_ml:
         st.session_state.button_start_ml = False
+    
+    if "download_triggered" not in st.session_state:
+        st.session_state.download_triggered = False
 
     st.warning("This section is still under development.")
 
@@ -195,16 +200,16 @@ def main():
                     if (length(archive$cols_y) > 1) {
                         col_names <- c(col_names, paste0(archive$cols_y[2], "_mean"), paste0(archive$cols_y[2], "_se"))
                     }
-                    print("Column names:")
-                    print(col_names)
+                    # print("Column names:")
+                    # print(col_names)
                     # Add new columns to candidate
                     for (col_name in col_names) {
                     if (!col_name %in% names(candidate)) {
                         candidate[, (col_name) := NA]
                         }
                     }
-                    print("candidate columns: ")
-                    print(names(candidate))
+                    # print("candidate columns: ")
+                    # print(names(candidate))
 
                     # Add the predicted mean values [1] and their standard errors [2] to candidate_new
                     if (length(archive$cols_y) > 1) {
@@ -389,66 +394,84 @@ def main():
                 df_no_preds = ro.conversion.get_conversion().rpy2py(result_no_preds)
                 df_with_preds = ro.conversion.get_conversion().rpy2py(result_with_preds)
 
-                # Replace -2147483648 with np.nan if -2147483648 exists in the DataFrame
-                replace_value_with_nan(df_no_preds)
-                replace_value_with_nan(df_with_preds)
+            # Replace -2147483648 with np.nan if -2147483648 exists in the DataFrame
+            replace_value_with_nan(df_no_preds)
+            replace_value_with_nan(df_with_preds)
 
-                save_metadata(metadata, user_id, selected_table, batch_number)
+            save_metadata(metadata, user_id, selected_table, batch_number)
 
-                bucket_name = metadata["bucket_name"]
-                batch_number = metadata["batch_number"]
+            bucket_name = metadata["bucket_name"]
+            batch_number = metadata["batch_number"]
 
-                upload_local_to_bucket(
-                    bucket_name, user_id, selected_table, batch_number
-                )
+            upload_local_to_bucket(
+                bucket_name, user_id, selected_table, batch_number, file_extension = ".rds"
+            )
 
-                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-                filename_no_preds = f"{timestamp}_{batch_number}-data.csv"
-                filename_with_preds = f"{timestamp}_{batch_number}-data-with-preds.csv"
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            filename_no_preds = f"{timestamp}_{batch_number}-data.csv"
+            filename_with_preds = f"{timestamp}_{batch_number}-data-with-preds.csv"
 
-                save_to_local(
-                    bucket_name,
-                    user_id,
-                    selected_table,
-                    filename_no_preds,
-                    df_no_preds,
-                    batch_number,
-                )
+            save_to_local(
+                bucket_name,
+                user_id,
+                selected_table,
+                filename_no_preds,
+                df_no_preds,
+                batch_number,
+            )
 
-                save_to_local(
-                    bucket_name,
-                    user_id,
-                    selected_table,
-                    filename_with_preds,
-                    df_with_preds,
-                    batch_number,
-                )
+            save_to_local(
+                bucket_name,
+                user_id,
+                selected_table,
+                filename_with_preds,
+                df_with_preds,
+                batch_number,
+            )
 
-                upload_local_to_bucket(
-                    bucket_name,
-                    user_id,
-                    selected_table,
-                    batch_number,
-                    file_extension=".csv",
-                )
+            upload_local_to_bucket(
+                bucket_name,
+                user_id,
+                selected_table,
+                batch_number,
+                file_extension=".csv",
+            )
 
-                # TODO: NaN appears as min largest value
-                # st.write(f"Table {table_name} has been updated.")
-                st.session_state.update_clicked = False
-                st.session_state.button_start_ml = False
+            downloaded_files = retrieve_and_download_files(bucket_name, user_id, selected_table, batch_number) 
+            st.write(f"Files retrieved: {[file['name'] for file in downloaded_files]}")                
+            
+            # Compress the files
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            output_zip = f"{timestamp}_data.zip"
+            zip_buffer = compress_files(downloaded_files)
+            st.write(f"Files compressed into: {output_zip}")
 
-                print(df_no_preds)
-                st.write(df_no_preds)
+            st.download_button(
+                label="Download compressed data",
+                data=zip_buffer.getvalue(),
+                file_name=output_zip,
+                mime="application/zip"
+            )
 
-                st.write(
-                    "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"
-                )
-                st.write(
-                    f"Files downloaded to local directory: /{bucket_name}/{user_id}/{selected_table}/{batch_number}"
-                )
-                st.write(
-                    "Run the proposed batch of experiments and proceed to `update` the model."
-                )
+            # TODO: NaN appears as min largest value
+            # st.write(f"Table {table_name} has been updated.")
+            st.session_state.update_clicked = False
+            st.session_state.button_start_ml = False
+
+            print(df_no_preds)
+            st.write(df_no_preds)
+
+            st.write(
+                "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"
+            )
+            st.write(
+                f"Files downloaded to local directory: /{bucket_name}/{user_id}/{selected_table}/{batch_number}"
+            )
+            st.write(
+                "Run the proposed batch of experiments and proceed to `update` the model."
+            )
+
+
 
 
 if __name__ == "__main__":
