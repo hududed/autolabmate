@@ -1,16 +1,18 @@
 import streamlit as st
 from utils import (
-    validate_inputs,
-    upload_metadata_to_bucket,
-    py_dict_to_r_list,
-    save_to_local,
-    upload_local_to_bucket,
-    save_metadata,
-    replace_value_with_nan,
+    compress_files,
     get_table_names,
     get_latest_data_for_table,
     get_latest_data_and_metadata,
     insert_data,
+    py_dict_to_r_list,
+    replace_value_with_nan,
+    retrieve_and_download_files,
+    save_to_local,
+    save_metadata,
+    upload_local_to_bucket,
+    upload_metadata_to_bucket,
+    validate_inputs,
 )
 import pandas as pd
 import rpy2.robjects as ro
@@ -54,6 +56,7 @@ def main():
         df_with_preds, metadata = get_latest_data_for_table(user_id, selected_table, batch_number)
         columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
         df = df_with_preds[columns_to_keep]
+
     if selected_table:
         st.write("Loading data from previous batch: ")
         # df = get_latest_row(user_id, selected_table)
@@ -409,72 +412,88 @@ def main():
                 df_no_preds = ro.conversion.get_conversion().rpy2py(data_no_preds)
                 df_with_preds = ro.conversion.get_conversion().rpy2py(data_with_preds)
 
-                num_rows_original = len(st.session_state.new_data)
-                df_with_preds_subset = df_with_preds.iloc[:num_rows_original]
+            num_rows_original = len(st.session_state.new_data)
+            df_with_preds_subset = df_with_preds.iloc[:num_rows_original]
 
-                # Replace -2147483648 with np.nan if -2147483648 exists in the DataFrame
-                replace_value_with_nan(df_no_preds)
-                replace_value_with_nan(df_with_preds)
+            # Replace -2147483648 with np.nan if -2147483648 exists in the DataFrame
+            replace_value_with_nan(df_no_preds)
+            replace_value_with_nan(df_with_preds)
 
-                save_metadata(metadata, user_id, selected_table, batch_number)
-                st.write("Saving metadata to local file")
+            save_metadata(metadata, user_id, selected_table, batch_number)
+            st.write("Saving metadata to local file")
 
-                upload_local_to_bucket(
-                    bucket_name, user_id, selected_table, batch_number
-                )
+            upload_local_to_bucket(
+                bucket_name, user_id, selected_table, batch_number
+            )
 
-                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-                filename_no_preds = f"{timestamp}_{batch_number}-data.csv"
-                filename_with_preds = f"{timestamp}_{batch_number}-data-with-preds.csv"
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            filename_no_preds = f"{timestamp}_{batch_number}-data.csv"
+            filename_with_preds = f"{timestamp}_{batch_number}-data-with-preds.csv"
 
-                save_to_local(
-                    bucket_name,
-                    user_id,
-                    selected_table,
-                    filename_no_preds,
-                    df_no_preds,
-                    batch_number,
-                )
+            save_to_local(
+                bucket_name,
+                user_id,
+                selected_table,
+                filename_no_preds,
+                df_no_preds,
+                batch_number,
+            )
 
-                save_to_local(
-                    bucket_name,
-                    user_id,
-                    selected_table,
-                    filename_with_preds,
-                    df_with_preds,
-                    batch_number,
-                )
+            save_to_local(
+                bucket_name,
+                user_id,
+                selected_table,
+                filename_with_preds,
+                df_with_preds,
+                batch_number,
+            )
 
-                upload_local_to_bucket(
-                    bucket_name,
-                    user_id,
-                    selected_table,
-                    batch_number,
-                    file_extension=".csv",
-                )
+            upload_local_to_bucket(
+                bucket_name,
+                user_id,
+                selected_table,
+                batch_number,
+                file_extension=".csv",
+            )
 
-                try:
-                    insert_data(selected_table, df_with_preds_subset, user_id, metadata)
+            downloaded_files = retrieve_and_download_files(bucket_name, user_id, selected_table, batch_number) 
+            st.write(f"Files retrieved: {[file['name'] for file in downloaded_files]}")                
+            
+            # Compress the files
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            output_zip = f"{timestamp}_{batch_number}_data.zip"
+            zip_buffer = compress_files(downloaded_files)
+            st.write(f"Files compressed into: {output_zip}")
 
-                    st.write(
-                        "Data uploaded successfully! Head to `dashboard` to see your data!"
-                    )
-                except Exception as e:
-                    st.write(f"Error uploading data: {e}")
+            st.download_button(
+                label="Download compressed data",
+                data=zip_buffer.getvalue(),
+                file_name=output_zip,
+                mime="application/zip"
+            )
 
-                st.dataframe(df_no_preds)
-                st.session_state.update_clicked = False
-                st.session_state.button_start_ml = False
+            try:
+                insert_data(selected_table, df_with_preds_subset, user_id, metadata)
 
                 st.write(
-                    "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"
+                    "Data uploaded successfully! Head to `dashboard` to see your data!"
                 )
-                st.write(
-                    f"Files downloaded to local directory: /{bucket_name}/{user_id}/{selected_table}/{batch_number}"
-                )
-                st.write(
-                    "Run the proposed batch of experiments and proceed to `update` the model."
-                )
+            except Exception as e:
+                st.write(f"Error uploading data: {e}")
+
+            st.dataframe(df_no_preds)
+            st.session_state.update_clicked = False
+            st.session_state.button_start_ml = False
+
+            st.write(
+                "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"
+            )
+            st.write(
+                f"Files downloaded to local directory: /{bucket_name}/{user_id}/{selected_table}/{batch_number}"
+            )
+            st.write(
+                "Run the proposed batch of experiments and proceed to `update` the model."
+            )
 
 
 if __name__ == "__main__":

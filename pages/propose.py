@@ -442,7 +442,7 @@ def main():
             
             # Compress the files
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            output_zip = f"{timestamp}_data.zip"
+            output_zip = f"{timestamp}_{batch_number}_data.zip"
             zip_buffer = compress_files(downloaded_files)
             st.write(f"Files compressed into: {output_zip}")
 
