@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy.stats import gaussian_kde
 import altair as alt
-from typing import Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Callable
 from pathlib import Path
 import json
 import simplejson
@@ -29,6 +29,8 @@ import zipfile
 from sklearn.inspection import partial_dependence
 from sklearn.inspection import PartialDependenceDisplay
 from sklearn.ensemble import RandomForestRegressor
+
+from abc import ABC, abstractmethod
 
 SEED = 42
 rng = RandomState(SEED)
@@ -52,16 +54,17 @@ inspector = inspect(engine)
 def compress_files(files):
     # Create an in-memory buffer to store the zip file
     buffer = BytesIO()
-    
+
     # Write the zip file to the buffer
     with zipfile.ZipFile(buffer, "w") as zip:
         for file in files:
-            zip.writestr(file['name'], file['content'])
-    
+            zip.writestr(file["name"], file["content"])
+
     # Seek to the beginning of the buffer
     buffer.seek(0)
-    
+
     return buffer
+
 
 # Define routes
 def create_account(email, password):
@@ -236,6 +239,7 @@ def upload_metadata_to_bucket(metadata, batch_number=1):
         metadata_content,
         batch_number,
     )
+
 
 def get_table_names(user_id):
     # Prepare the SELECT statement
@@ -483,37 +487,42 @@ def retrieve_bucket_files(bucket_name):
     print(files)
     return files
 
-def retrieve_and_download_files(bucket_name, user_id, table_name, batch_number=1, local_dir="./"):
+
+def retrieve_and_download_files(
+    bucket_name, user_id, table_name, batch_number=1, local_dir="./"
+):
     """
     Retrieve all files from the specified bucket and download them locally.
-    
+
     Args:
         bucket_name (str): The name of the bucket.
         user_id (str): The user ID.
         table_name (str): The table name.
         batch_number (int): The batch number.
         local_dir (str): The local directory to save the downloaded files.
-        
+
     Returns:
         list: A list of local file paths.
     """
-    files = supabase_client.storage.from_(bucket_name).list(f"{user_id}/{table_name}/{batch_number}")
+    files = supabase_client.storage.from_(bucket_name).list(
+        f"{user_id}/{table_name}/{batch_number}"
+    )
     if not files:
         raise Exception("No files to download")
-    
+
     # print("Files listed in bucket: ", files)
     downloaded_files = []
     for file in files:
-        file_name = file['name']
-        response = supabase_client.storage.from_(bucket_name).download(f"{user_id}/{table_name}/{batch_number}/{file_name}")
-                
+        file_name = file["name"]
+        response = supabase_client.storage.from_(bucket_name).download(
+            f"{user_id}/{table_name}/{batch_number}/{file_name}"
+        )
+
         # Store the file name and content in a dictionary
-        downloaded_files.append({
-            "name": file_name,
-            "content": response
-        })
-    
+        downloaded_files.append({"name": file_name, "content": response})
+
     return downloaded_files
+
 
 def create_query(table_name, pair_param=None):
     if pair_param:
@@ -728,118 +737,147 @@ def report_output_with_confidence(df: pd.DataFrame, output: str):
     return plt.gcf()
 
 
-def create_dashboard_report_multi(
-    df: pd.DataFrame,
-    df_with_preds: pd.DataFrame,
-    models: Tuple[RandomForestRegressor, RandomForestRegressor],
-    output_columns: list[str],
-    metadata: Dict[str, Any],
-):
-    """
-    Compiles various plots into a single PDF report.
-    """
-    buf = BytesIO()
-    with PdfPages(buf) as pdf:
-        # Pairplot
-        fig = report_pairplot(df)
+class DashboardReportBase(ABC):
+    def __init__(
+        self, df: pd.DataFrame, df_with_preds: pd.DataFrame, metadata: Dict[str, Any]
+    ):
+        self.df = df
+        self.df_with_preds = df_with_preds
+        self.metadata = metadata
+        self.buf = BytesIO()
+
+    def save_fig_to_pdf(self, fig, pdf: PdfPages):
         pdf.savefig(fig)
         plt.close(fig)
+
+    def generate_pairplot(self, pdf: PdfPages, pairplot_func: Callable):
+        fig = pairplot_func()
+        self.save_fig_to_pdf(fig, pdf)
         st.info("Pairplot created")
 
-        # Generate all unique pairs of features
-        feature_pairs = list(itertools.combinations(metadata["X_columns"], 2))
+    def generate_output_vs_iteration_plot(
+        self, output_name, pdf, output_plot_func: Callable
+    ):
+        fig = output_plot_func(output_name)
+        self.save_fig_to_pdf(fig, pdf)
+        st.info("Output vs Iteration plot created")
 
-        # Output vs Iteration Plot
-        for model, output_name in zip(models, output_columns):
-            fig = report_output_with_confidence(df_with_preds, output_name)
-            pdf.savefig(fig)
-            plt.close(fig)
-            st.info("Output vs Iteration plot created")
+    def generate_single_pdp(
+        self, model, output_name, pdf, pdp_func: Callable, n_outputs
+    ):
+        fig = pdp_func(model, output_name, n_outputs=n_outputs)
+        self.save_fig_to_pdf(fig, pdf)
+        st.info("Single PDP plot created")
 
-            # Single PDP (example)
-            fig = report_pdp(df, model, output_name, n_outputs=2)
-            pdf.savefig(fig)
-            plt.close(fig)
-            st.info("Single PDP plot created")
+    def generate_two_way_pdp(
+        self,
+        feature_pairs,
+        model,
+        output_name,
+        pdf,
+        two_way_pdp_func: Callable,
+        n_outputs,
+    ):
+        for pair in feature_pairs:
+            figures = two_way_pdp_func(
+                [pair],
+                model=model,
+                output_name=output_name,
+                n_outputs=n_outputs,
+                overlay=True,
+                for_report=True,
+            )
+            for fig in figures:
+                self.save_fig_to_pdf(fig, pdf)
+            st.info("2-way PDP plot created")
 
-            # 2-way PDP (example)
-            for pair in feature_pairs:
-                figures = plot_interaction_pdp(
-                    df,
-                    [pair],
+    @abstractmethod
+    def create_report(self, **plot_funcs):
+        pass
+
+
+class DashboardReportMulti(DashboardReportBase):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        df_with_preds: pd.DataFrame,
+        models: Tuple[RandomForestRegressor, RandomForestRegressor],
+        output_columns: List[str],
+        metadata: Dict[str, Any],
+    ):
+        super().__init__(df, df_with_preds, metadata)
+        self.models = models
+        self.output_columns = output_columns
+
+    def create_report(self, **plot_funcs):
+        with PdfPages(self.buf) as pdf:
+            # Pairplot
+            self.generate_pairplot(pdf, plot_funcs["pairplot_func"])
+
+            # Generate all unique pairs of features
+            feature_pairs = list(itertools.combinations(self.metadata["X_columns"], 2))
+
+            # Output vs Iteration Plot and PDPs
+            for model, output_name in zip(self.models, self.output_columns):
+                self.generate_output_vs_iteration_plot(
+                    output_name, pdf, plot_funcs["output_plot_func"]
+                )
+                self.generate_single_pdp(
+                    model, output_name, pdf, plot_funcs["pdp_func"], n_outputs=2
+                )
+                self.generate_two_way_pdp(
+                    feature_pairs,
                     model,
                     output_name,
+                    pdf,
+                    plot_funcs["two_way_pdp_func"],
                     n_outputs=2,
-                    overlay=True,
-                    for_report=True,
-                )
-                for fig in figures:
-                    pdf.savefig(fig)
-                    plt.close(fig)
-                st.info("2-way PDP plot created")
-
-    buf.seek(0)
-    return buf
-
-
-def create_matplotlib_plot(df: pd.DataFrame, output_columns: list[str]):
-    """
-    Generates a PDF containing plots for each output column in the DataFrame.
-
-    Parameters:
-    - df: DataFrame containing the data.
-    - output_columns: List of output column names to plot.
-    - metadata: Dictionary containing additional information for plotting.
-    """
-    # Start a PDF buffer
-    buf = BytesIO()
-    with PdfPages(buf) as pdf:
-        for output in output_columns:
-            plt.figure(figsize=(10, 6))
-            # Scatter plot for raw output values as dots
-            plt.scatter(df.index, df[output], label=f"Raw {output}", marker="o")
-            plt.plot(df.index, df[output], label=f"Raw {output} (line)", alpha=0.5)
-
-            # Check for mean and se columns and plot if they exist
-            mean_col = f"{output}_mean"
-            se_col = f"{output}_se"
-            if mean_col in df.columns and se_col in df.columns:
-                df_not_null = df.dropna(subset=[mean_col, se_col])
-                plt.plot(
-                    df_not_null.index,
-                    df_not_null[mean_col],
-                    "x",
-                    label=f"Mean {output}",
-                    color="red",
-                )
-                lower_bound = df_not_null[mean_col] - df_not_null[se_col]
-                upper_bound = df_not_null[mean_col] + df_not_null[se_col]
-                plt.fill_between(
-                    df_not_null.index,
-                    lower_bound,
-                    upper_bound,
-                    color="gray",
-                    alpha=0.2,
-                    label=f"Confidence Interval ({output})",
                 )
 
-            plt.title(f"{output} as a function of iteration")
-            plt.xlabel("Iteration")
-            plt.ylabel(output)
-            plt.legend()
-            pdf.savefig()  # Save the current figure into the PDF
-            plt.close()
-
-    buf.seek(0)
-    return buf
+        self.buf.seek(0)
+        return self.buf
 
 
-def plot_pairplot_old(df):
-    sns.set_theme(context="talk")
-    pairplot_fig = sns.pairplot(df, diag_kind="kde")
-    plt.suptitle("Pairplot of the DataFrame", size=20, y=1.02)
+class DashboardReportSingle(DashboardReportBase):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        df_with_preds: pd.DataFrame,
+        model: RandomForestRegressor,
+        output_columns: List[str],
+        metadata: Dict[str, Any],
+    ):
+        super().__init__(df, df_with_preds, metadata)
+        self.model = model
+        self.output_columns = output_columns
 
-    st.pyplot(pairplot_fig)
+    def create_report(self, **plot_funcs):
+        with PdfPages(self.buf) as pdf:
+            # Pairplot
+            self.generate_pairplot(pdf, plot_funcs["pairplot_func"])
+
+            # Generate all unique pairs of features
+            feature_pairs = list(itertools.combinations(self.metadata["X_columns"], 2))
+
+            # Output vs Iteration Plot and PDPs
+            output_name = self.output_columns[0]
+            self.generate_output_vs_iteration_plot(
+                output_name, pdf, plot_funcs["output_plot_func"]
+            )
+            self.generate_single_pdp(
+                self.model, output_name, pdf, plot_funcs["pdp_func"], n_outputs=1
+            )
+            self.generate_two_way_pdp(
+                feature_pairs,
+                self.model,
+                output_name,
+                pdf,
+                plot_funcs["two_way_pdp_func"],
+                n_outputs=1,
+            )
+
+        self.buf.seek(0)
+        return self.buf
 
 
 def plot_pairplot(df):
@@ -954,41 +992,6 @@ def report_pairplot(df: pd.DataFrame) -> Figure:
 
     plt.tight_layout()
     return fig
-
-
-def plot_pdp_old(df):
-    """
-    Plot a partial dependence graph for the specified features.
-
-    Parameters:
-    df (pd.DataFrame): The DataFrame containing the data.
-    """
-    # Define the model
-    model = RandomForestRegressor(random_state=rng)
-
-    # Separate the features and the target
-    X = df.select_dtypes(include=[np.number]).iloc[:, :-1]
-    y = df.iloc[:, -1]
-
-    # Fit the model
-    model.fit(X, y)
-
-    # Add a small random noise to the feature values
-    X_noise = X + np.random.normal(0, 0.01, size=X.shape)
-
-    # Compute the partial dependencies
-    pdp_results = partial_dependence(model, X_noise, features=X.columns)
-
-    # Plot the partial dependence
-    display = PartialDependenceDisplay.from_estimator(
-        model, X, features=X.columns, kind="both"
-    )
-    # Remove the legend
-    for ax in display.axes_.ravel():
-        ax.get_legend().remove()
-
-    display.figure_.suptitle("1-way numerical PDP using random forest", fontsize=16)
-    st.pyplot(plt)
 
 
 def plot_pdp(
@@ -1348,7 +1351,7 @@ def get_user_inputs(df: pd.DataFrame, metadata: Dict[str, Any]) -> tuple:
 
     # print(metadata)
 
-     # Get optimization type with default from metadata
+    # Get optimization type with default from metadata
     optimization_type = metadata["optimization_type"]
 
     # Get output column names and directions from metadata

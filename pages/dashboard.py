@@ -1,5 +1,6 @@
 from typing import Any, Dict
 import streamlit as st
+from functools import partial
 from utils import (
     show_dashboard,
     show_dashboard_multi,
@@ -14,7 +15,12 @@ from utils import (
     feature_importance,
     feature_importance_multi,
     plot_output_with_confidence,
-    create_dashboard_report_multi,
+    report_pairplot,
+    report_output_with_confidence,
+    report_pdp,
+    plot_interaction_pdp,
+    DashboardReportMulti,
+    DashboardReportSingle,
 )
 
 
@@ -81,6 +87,12 @@ def main():
             directions: Dict[str, Any] = metadata["directions"]
             output_columns: list[str] = metadata["output_column_names"]
 
+            # Define the plotting functions
+            pairplot_func = partial(report_pairplot, df)
+            output_plot_func = partial(report_output_with_confidence, df_with_preds)
+            pdp_func = partial(report_pdp, df)
+            two_way_pdp_func = partial(plot_interaction_pdp, df)
+
             # TODO: save metadata to db, currently switching between single and multi will not work
             if len(output_columns) == 2:
                 models = train_model_multi(df)
@@ -100,16 +112,27 @@ def main():
                 )
                 plot_output_with_confidence(df_with_preds, output_columns, metadata)
 
+                report_generator = DashboardReportMulti(
+                    df, df_with_preds, models, output_columns, metadata
+                )
             else:
                 model = train_model(df)
                 show_dashboard(df, model, directions, output_columns)
                 feature_importance(df, model)
                 show_interaction_pdp(df, pair_param, model, overlay=True)
 
+                # Create the single-output report
+                report_generator = DashboardReportSingle(
+                    df, df_with_preds, model, output_columns, metadata
+                )
+
             # Add the button for downloading the Matplotlib plot
             if st.button("Generate Summary Report for Download"):
-                buf = create_dashboard_report_multi(
-                    df, df_with_preds, models, output_columns, metadata
+                buf = report_generator.create_report(
+                    pairplot_func=pairplot_func,
+                    output_plot_func=output_plot_func,
+                    pdp_func=pdp_func,
+                    two_way_pdp_func=two_way_pdp_func,
                 )
                 st.download_button(
                     label="Download Matplotlib Plot as PDF",
