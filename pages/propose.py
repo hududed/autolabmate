@@ -9,7 +9,7 @@ from utils import (
     insert_data,
     py_dict_to_r_list,
     replace_value_with_nan,
-    retrieve_and_download_files, 
+    retrieve_and_download_files,
     save_metadata,
     save_to_local,
     upload_local_to_bucket,
@@ -31,7 +31,7 @@ def main():
     # Reset st.session_state.button_start_ml to False when the page is loaded
     if "button_start_ml" not in st.session_state or st.session_state.button_start_ml:
         st.session_state.button_start_ml = False
-    
+
     if "download_triggered" not in st.session_state:
         st.session_state.download_triggered = False
 
@@ -404,7 +404,11 @@ def main():
             batch_number = metadata["batch_number"]
 
             upload_local_to_bucket(
-                bucket_name, user_id, selected_table, batch_number, file_extension = ".rds"
+                bucket_name,
+                user_id,
+                selected_table,
+                batch_number,
+                file_extension=".rds",
             )
 
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -437,9 +441,11 @@ def main():
                 file_extension=".csv",
             )
 
-            downloaded_files = retrieve_and_download_files(bucket_name, user_id, selected_table, batch_number) 
-            st.write(f"Files retrieved: {[file['name'] for file in downloaded_files]}")                
-            
+            downloaded_files = retrieve_and_download_files(
+                bucket_name, user_id, selected_table, batch_number
+            )
+            st.write(f"Files retrieved: {[file['name'] for file in downloaded_files]}")
+
             # Compress the files
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             output_zip = f"{timestamp}_{batch_number}_data.zip"
@@ -450,7 +456,7 @@ def main():
                 label="Download compressed data",
                 data=zip_buffer.getvalue(),
                 file_name=output_zip,
-                mime="application/zip"
+                mime="application/zip",
             )
 
             # TODO: NaN appears as min largest value
@@ -470,8 +476,6 @@ def main():
             st.write(
                 "Run the proposed batch of experiments and proceed to `update` the model."
             )
-
-
 
 
 if __name__ == "__main__":
