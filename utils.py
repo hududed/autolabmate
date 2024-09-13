@@ -32,6 +32,8 @@ from sklearn.ensemble import RandomForestRegressor
 
 from abc import ABC, abstractmethod
 
+from storage3.utils import StorageException
+
 SEED = 42
 rng = RandomState(SEED)
 
@@ -49,6 +51,23 @@ DATABASE_URL = f"postgresql://postgres.zugnayzgayyoveqcmtcd:{PG_PASS}@aws-0-us-e
 # )
 engine = create_engine(DATABASE_URL, echo=True)
 inspector = inspect(engine)
+
+
+def refresh_jwt():
+    global supabase_client
+    # Get the current session
+    session = supabase_client.auth.get_session()
+
+    if session:
+        refresh_token = session["refresh_token"]
+        # Refresh the session using the refresh token
+        new_session = supabase_client.auth.refresh_session(refresh_token)
+        if new_session:
+            new_jwt = new_session["access_token"]
+            # Reinitialize the Supabase client with the new JWT
+            supabase_client = supabase.create_client(supabase_url, new_jwt)
+            return new_jwt
+    return None
 
 
 def compress_files(files):
@@ -208,8 +227,19 @@ def upload_local_to_bucket(
             )
             print(new_file_name)
             st.write(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
-        except Exception as e:
-            if "Duplicate" in str(e):
+        except StorageException as e:
+            if "jwt expired" in str(e):
+                # Refresh the JWT and retry the upload
+                new_jwt = refresh_jwt()
+                if new_jwt:
+                    supabase_client.storage.from_(bucket_name).upload(
+                        new_file_name, file_content
+                    )
+                    print(new_file_name)
+                    st.write(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
+                else:
+                    raise e
+            elif "Duplicate" in str(e):
                 print(
                     f'File "{new_file_name}" already exists in bucket "{bucket_name}", skipping upload'
                 )
