@@ -7,6 +7,10 @@ from utils import (
 )
 import pandas as pd
 
+from session_state import initialize_session_state
+
+initialize_session_state()
+
 
 st.title("Upload first batch CSV")
 

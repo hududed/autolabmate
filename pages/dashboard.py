@@ -22,7 +22,9 @@ from utils import (
     DashboardReportMulti,
     DashboardReportSingle,
 )
+from session_state import initialize_session_state
 
+initialize_session_state()
 
 st.title("Dashboard")
 

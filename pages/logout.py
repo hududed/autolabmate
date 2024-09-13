@@ -4,6 +4,9 @@ from streamlit_extras.switch_page_button import (
 )
 from components.authenticate import supabase_client
 from time import sleep
+from session_state import initialize_session_state
+
+initialize_session_state()
 
 
 # Logout page

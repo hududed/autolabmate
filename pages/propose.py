@@ -21,6 +21,10 @@ from rpy2.robjects import pandas2ri
 
 from datetime import datetime
 
+from session_state import initialize_session_state
+
+initialize_session_state()
+
 st.title("Propose Experiment")
 
 

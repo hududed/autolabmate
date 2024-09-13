@@ -20,6 +20,10 @@ from rpy2.robjects import pandas2ri
 
 from datetime import datetime
 
+from session_state import initialize_session_state
+
+initialize_session_state()
+
 st.title("Update Experiment")
 
 
@@ -43,7 +47,9 @@ def main():
     batch_number = st.number_input("Enter batch number", min_value=2, value=2, step=1)
 
     # Get the latest metadata
-    df_with_preds, metadata, latest_table = get_latest_data_and_metadata(user_id, batch_number)
+    df_with_preds, metadata, latest_table = get_latest_data_and_metadata(
+        user_id, batch_number
+    )
     columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
     df = df_with_preds[columns_to_keep]
 
@@ -53,7 +59,9 @@ def main():
     )
 
     if selected_table != default_table:
-        df_with_preds, metadata = get_latest_data_for_table(user_id, selected_table, batch_number)
+        df_with_preds, metadata = get_latest_data_for_table(
+            user_id, selected_table, batch_number
+        )
         columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
         df = df_with_preds[columns_to_keep]
 
@@ -422,9 +430,7 @@ def main():
             save_metadata(metadata, user_id, selected_table, batch_number)
             st.write("Saving metadata to local file")
 
-            upload_local_to_bucket(
-                bucket_name, user_id, selected_table, batch_number
-            )
+            upload_local_to_bucket(bucket_name, user_id, selected_table, batch_number)
 
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             filename_no_preds = f"{timestamp}_{batch_number}-data.csv"
@@ -456,9 +462,11 @@ def main():
                 file_extension=".csv",
             )
 
-            downloaded_files = retrieve_and_download_files(bucket_name, user_id, selected_table, batch_number) 
-            st.write(f"Files retrieved: {[file['name'] for file in downloaded_files]}")                
-            
+            downloaded_files = retrieve_and_download_files(
+                bucket_name, user_id, selected_table, batch_number
+            )
+            st.write(f"Files retrieved: {[file['name'] for file in downloaded_files]}")
+
             # Compress the files
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             output_zip = f"{timestamp}_{batch_number}_data.zip"
@@ -469,7 +477,7 @@ def main():
                 label="Download compressed data",
                 data=zip_buffer.getvalue(),
                 file_name=output_zip,
-                mime="application/zip"
+                mime="application/zip",
             )
 
             try:
