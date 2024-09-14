@@ -29,6 +29,7 @@ pdpbox = "^0.3.0"
 pydoe = "^0.3.8"
 sobol-seq = "^0.2.0"
 simplejson = "^3.19.2"
+pytest-mock = "^3.14.0"
 
 
 [tool.poetry.group.dev.dependencies]
