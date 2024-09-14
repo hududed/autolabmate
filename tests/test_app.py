@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import MagicMock
 import streamlit as st
 from app import login, signup, logout, main
-from components.authenticate import supabase_client, initialize_session_state
+from components.authenticate import supabase_client
 
 
 @pytest.fixture
