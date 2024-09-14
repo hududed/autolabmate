@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import streamlit as st
 from auto_csv_generator.csv_generator import CSVGenerator
 
@@ -68,11 +68,21 @@ def test_get_optimization_type(mock_streamlit):
 
 def test_get_parameter_ranges(mock_streamlit):
     generator = CSVGenerator()
-    generator.param_names = ["param1"]
-    generator.param_types = ["Integer"]
+    generator.param_names = ["param1", "param2"]
+    generator.param_types = ["Integer", "Float"]
+
+    # Set return values for number_input mocks
+    st.number_input.side_effect = [0, 100, 1, 0.0, 100.0, 0.1]
+
     generator.get_parameter_ranges()
     st.number_input.assert_any_call("Minimum value for param1:", value=0)
     st.number_input.assert_any_call("Maximum value for param1:", value=100)
+    st.number_input.assert_any_call("Interval for param1:", value=1)
+    st.number_input.assert_any_call("Minimum value for param2:", value=0.0)
+    st.number_input.assert_any_call("Maximum value for param2:", value=100.0)
+    st.number_input.assert_any_call("Interval for param2:", value=0.1)
+    assert generator.param_ranges == [(0, 100), (0.0, 100.0)]
+    assert generator.param_intervals == [1, 0.1]
 
 
 def test_generate_random_values(mock_streamlit):
@@ -81,10 +91,16 @@ def test_generate_random_values(mock_streamlit):
     generator.nr_random_lines = 2
     generator.param_types = ["Integer", "Float"]
     generator.param_ranges = [(0, 10), (0.0, 1.0)]
+    generator.param_intervals = [2, 0.2]
     generator.precision = 2
     generator.generate_random_values()
     assert len(generator.param_values) == 2
     assert len(generator.param_values[0]) == 2
+    for values in generator.param_values:
+        assert values[0] % 2 == 0  # Check integer interval
+        assert round(values[1] % 0.2, 2) == 0.0  # Check float interval
+        assert 0 <= values[0] <= 10  # Check integer range
+        assert 0.0 <= values[1] <= 1.0  # Check float range
 
 
 def test_write_csv_file(mock_streamlit):

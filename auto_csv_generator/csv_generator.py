@@ -17,6 +17,7 @@ class CSVGenerator:
         self.optimization_type = None
         self.final_col_name = None
         self.param_ranges = []
+        self.param_intervals = []
         self.param_values = []
         self.data_header = []
 
@@ -81,7 +82,11 @@ class CSVGenerator:
                 max_val = st.number_input(
                     f"Maximum value for {self.param_names[i]}:", value=100
                 )
+                interval = st.number_input(
+                    f"Interval for {self.param_names[i]}:", value=1
+                )
                 self.param_ranges.append((min_val, max_val))
+                self.param_intervals.append(interval)
             elif self.param_types[i] == "Float":
                 min_val = st.number_input(
                     f"Minimum value for {self.param_names[i]}:", value=0.0
@@ -89,7 +94,11 @@ class CSVGenerator:
                 max_val = st.number_input(
                     f"Maximum value for {self.param_names[i]}:", value=100.0
                 )
+                interval = st.number_input(
+                    f"Interval for {self.param_names[i]}:", value=0.1
+                )
                 self.param_ranges.append((min_val, max_val))
+                self.param_intervals.append(interval)
             else:
                 categories = st.text_input(
                     f"Enter categories for {self.param_names[i]} (comma-separated):",
@@ -97,25 +106,7 @@ class CSVGenerator:
                 )
                 categories = [cat.strip() for cat in categories.split(",")]
                 self.param_ranges.append(categories)
-
-    # def generate_parameter_values(self) -> None:
-    #     try:
-    #         for i in range(self.nr_random_lines):
-    #             values = []
-    #             for j in range(self.series):
-    #                 if self.param_types[j] == 'Integer':
-    #                     min_val, max_val = self.param_ranges[j]
-    #                     value = randrange(min_val, max_val+1, 1)
-    #                 elif self.param_types[j] == 'Float':
-    #                     min_val, max_val = self.param_ranges[j]
-    #                     value = format(round(uniform(min_val, max_val), 2), '.2f')
-    #                 else:
-    #                     categories = self.param_ranges[j]
-    #                     value = categories[randrange(len(categories))]
-    #                 values.append(value)
-    #             self.param_values.append(values)
-    #     except Exception as e:
-    #         st.error(f'Error generating parameter values: {e}')
+                self.param_intervals.append(None)
 
     def generate_parameter_values(self) -> None:
         if self.randomization_type == "Random":
@@ -126,17 +117,22 @@ class CSVGenerator:
             self.generate_sobol_values()
 
     def generate_random_values(self) -> None:
-        for i in range(self.nr_random_lines):
+        self.param_values = []
+        for _ in range(self.nr_random_lines):
             values = []
-            for j in range(self.series):
-                if self.param_types[j] == "Integer":
-                    min_val, max_val = self.param_ranges[j]
-                    value = randrange(min_val, max_val + 1, 1)
-                elif self.param_types[j] == "Float":
-                    min_val, max_val = self.param_ranges[j]
-                    value = round(uniform(min_val, max_val), self.precision)
+            for i in range(len(self.param_types)):
+                if self.param_types[i] == "Integer":
+                    min_val, max_val = self.param_ranges[i]
+                    interval = self.param_intervals[i]
+                    value = randrange(min_val, max_val + 1, interval)
+                elif self.param_types[i] == "Float":
+                    min_val, max_val = self.param_ranges[i]
+                    interval = self.param_intervals[i]
+                    value = round(
+                        uniform(min_val, max_val) // interval * interval, self.precision
+                    )
                 else:
-                    categories = self.param_ranges[j]
+                    categories = self.param_ranges[i]
                     value = categories[randrange(len(categories))]
                 values.append(value)
             self.param_values.append(values)
