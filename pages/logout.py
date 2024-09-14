@@ -1,19 +1,18 @@
 import streamlit as st
-from streamlit_extras.switch_page_button import (
-    switch_page,
+from streamlit_extras.switch_page_button import switch_page
+from components.authenticate import (
+    supabase_client,
+    initialize_session_state,
+    check_authentication,
 )
-from components.authenticate import supabase_client
 from time import sleep
-from session_state import initialize_session_state
 
 initialize_session_state()
 
 
 # Logout page
 def logout():
-    if not st.session_state.authentication_status:
-        st.info("Please Login from the Home page and try again.")
-        st.stop()
+    check_authentication()
     st.session_state.authentication_status = False  # set the logged_in state to False
     res = supabase_client.auth.sign_out()
     if res:

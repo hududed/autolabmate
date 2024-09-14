@@ -21,7 +21,7 @@ from rpy2.robjects import pandas2ri
 
 from datetime import datetime
 
-from session_state import initialize_session_state
+from components.authenticate import initialize_session_state, check_authentication
 
 initialize_session_state()
 
@@ -29,9 +29,7 @@ st.title("Propose Experiment")
 
 
 def main():
-    if not st.session_state.authentication_status:
-        st.info("Please Login from the Home page and try again.")
-        st.stop()
+    check_authentication()
     # Reset st.session_state.button_start_ml to False when the page is loaded
     if "button_start_ml" not in st.session_state or st.session_state.button_start_ml:
         st.session_state.button_start_ml = False

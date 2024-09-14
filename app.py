@@ -1,5 +1,5 @@
 import streamlit as st
-from components.authenticate import supabase_client
+from components.authenticate import supabase_client, initialize_session_state
 from st_pages import show_pages, Page
 from streamlit_extras.switch_page_button import switch_page
 from time import sleep
@@ -8,6 +8,8 @@ from utils import (
     create_policy,
     create_experiments_table,
 )
+
+initialize_session_state()
 
 st.title("Welcome to Autolabmate!!")
 
@@ -49,11 +51,6 @@ def login():
 
 
 def signup():
-    if "retry_count" not in st.session_state:
-        st.session_state.retry_count = 0
-    if "retry_delay" not in st.session_state:
-        st.session_state.retry_delay = 1  # Initial delay between retries in seconds
-
     st.header("Sign Up")
     email = st.text_input("Email")
     password = st.text_input("Password", type="password")
@@ -86,22 +83,6 @@ def signup():
                 st.error(f"An error occurred: {e}")
 
 
-# # Sign-up form
-# def signup():
-#     st.header("Sign Up")
-#     email = st.text_input("Email")
-#     password = st.text_input("Password", type="password")
-
-#     if st.button("Sign Up"):
-#         # Insert user details into the database
-#         user_data = supabase_client.auth.sign_up({"email": email, "password": password})
-#         print(user_data)
-#         if user_data:
-#             st.success("Successfully registered!")
-#         else:
-#             st.error("Registration failed!")
-
-
 # Logout page
 def logout():
     st.session_state.authentication_status = False  # set the logged_in state to False
@@ -116,8 +97,7 @@ def logout():
 
 # Run the Streamlit app
 def main():
-    if "authentication_status" not in st.session_state:
-        st.session_state.authentication_status = False
+    initialize_session_state()
 
     show_pages([Page("app.py", "home")])
 

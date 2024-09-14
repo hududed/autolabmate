@@ -7,7 +7,7 @@ from utils import (
 )
 import pandas as pd
 
-from session_state import initialize_session_state
+from components.authenticate import initialize_session_state, check_authentication
 
 initialize_session_state()
 
@@ -16,9 +16,7 @@ st.title("Upload first batch CSV")
 
 
 def main():
-    if not st.session_state.authentication_status:
-        st.info("Please Login from the Home page and try again.")
-        st.stop()
+    check_authentication()
 
     if "table_name" not in st.session_state:
         st.session_state.table_name = ""

@@ -1,14 +1,13 @@
 import streamlit as st
 from auto_csv_generator.csv_generator import CSVGenerator
-from session_state import initialize_session_state
+from components.authenticate import initialize_session_state, check_authentication
 
 
 def main() -> None:
     initialize_session_state()
 
-    if not st.session_state.authentication_status:
-        st.info("Please Login from the Home page and try again.")
-        st.stop()
+    check_authentication()
+
     st.title("CSV Generator")
     generator = CSVGenerator()
     generator.generate()

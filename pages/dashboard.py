@@ -22,7 +22,7 @@ from utils import (
     DashboardReportMulti,
     DashboardReportSingle,
 )
-from session_state import initialize_session_state
+from components.authenticate import initialize_session_state, check_authentication
 
 initialize_session_state()
 
@@ -30,9 +30,7 @@ st.title("Dashboard")
 
 
 def main():
-    if not st.session_state.authentication_status:
-        st.info("Please Login from the Home page and try again.")
-        st.stop()
+    check_authentication()
 
     user_id = st.session_state.user_id
 
@@ -45,8 +43,6 @@ def main():
     df_with_preds, metadata, latest_table = get_latest_data_and_metadata(user_id)
     columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
     df = df_with_preds[columns_to_keep]
-    # print(f"########### {latest_table}")
-    # print("df to display:", df)
 
     default_table = latest_table
     selected_table = st.selectbox(
@@ -57,8 +53,6 @@ def main():
         df_with_preds, metadata = get_latest_data_for_table(user_id, selected_table)
         columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
         df = df_with_preds[columns_to_keep]
-        # print(f"Selected table {selected_table} is different from default table {default_table}")
-        # print("df to display:", df)
 
     if metadata is None:
         raise ValueError("metadata is None. Please upload a new table.")

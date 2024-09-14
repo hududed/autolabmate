@@ -34,40 +34,11 @@ from abc import ABC, abstractmethod
 
 from storage3.utils import StorageException
 
+from components.authenticate import supabase_client, engine, refresh_jwt
+
+
 SEED = 42
 rng = RandomState(SEED)
-
-load_dotenv()
-# Load Supabase credentials from .env file
-supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_KEY")
-
-# Initialize Supabase client
-supabase_client = supabase.create_client(supabase_url, supabase_key)
-PG_PASS = os.getenv("PG_PASS")
-DATABASE_URL = f"postgresql://postgres.zugnayzgayyoveqcmtcd:{PG_PASS}@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
-# DATABASE_URL = (
-#     f"postgresql://postgres:{PG_PASS}@db.zugnayzgayyoveqcmtcd.supabase.co:5432/postgres"
-# )
-engine = create_engine(DATABASE_URL, echo=True)
-inspector = inspect(engine)
-
-
-def refresh_jwt():
-    global supabase_client
-    # Get the current session
-    session = supabase_client.auth.get_session()
-
-    if session:
-        refresh_token = session["refresh_token"]
-        # Refresh the session using the refresh token
-        new_session = supabase_client.auth.refresh_session(refresh_token)
-        if new_session:
-            new_jwt = new_session["access_token"]
-            # Reinitialize the Supabase client with the new JWT
-            supabase_client = supabase.create_client(supabase_url, new_jwt)
-            return new_jwt
-    return None
 
 
 def compress_files(files):
