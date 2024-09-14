@@ -4,6 +4,7 @@ import streamlit as st
 from pages.generate import main
 
 
+# TODO: new test with the refactored generator
 @pytest.fixture
 def mock_streamlit(mocker):
     mocker.patch.object(st, "title")
