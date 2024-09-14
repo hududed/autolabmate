@@ -27,7 +27,7 @@ def login():
         )
 
         if response:
-            st.success("Logged In Sucessfully {}".format(email))
+            st.success("Logged In Successfully {}".format(email))
             st.session_state.authentication_status = True
             st.session_state.user_id = response.user.id
 
@@ -65,8 +65,6 @@ def signup():
                 st.success("Successfully registered!")
                 st.session_state.retry_count = 0  # Reset retry count on success
                 return
-            else:
-                st.error("Registration failed!")
         except Exception as e:
             if "429" in str(e):
                 if st.session_state.retry_count < 3:  # Maximum number of retries
