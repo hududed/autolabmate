@@ -21,7 +21,7 @@ from rpy2.robjects import pandas2ri
 import pandas as pd
 from datetime import datetime
 
-from components.authenticate import initialize_session_state, check_authentication
+from auth.authenticate import initialize_session_state, check_authentication
 
 initialize_session_state()
 

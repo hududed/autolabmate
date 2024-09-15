@@ -25,7 +25,6 @@ def initialize_session_state():
     Returns:
         Nothing.
     """
-
     if "authentication_status" not in st.session_state:
         st.session_state.authentication_status = False
     if "user_id" not in st.session_state:
@@ -34,6 +33,10 @@ def initialize_session_state():
         st.session_state.retry_count = 0
     if "retry_delay" not in st.session_state:
         st.session_state.retry_delay = 1  # Initial delay between retries in seconds
+    if "table_name" not in st.session_state:
+        st.session_state.table_name = ""
+    if "update_clicked" not in st.session_state:
+        st.session_state.update_clicked = False
 
 
 def check_authentication():

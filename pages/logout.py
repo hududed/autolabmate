@@ -1,6 +1,6 @@
 import streamlit as st
 from streamlit_extras.switch_page_button import switch_page
-from components.authenticate import (
+from auth.authenticate import (
     supabase_client,
     initialize_session_state,
     check_authentication,

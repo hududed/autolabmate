@@ -1,27 +1,20 @@
 import streamlit as st
+import pandas as pd
+from auth.authenticate import initialize_session_state, check_authentication
 from utils import (
     insert_data,
     upload_local_to_bucket,
     save_to_local,
     sanitize_column_names,
 )
-import pandas as pd
-
-from components.authenticate import initialize_session_state, check_authentication
-
-initialize_session_state()
-
 
 st.title("Upload first batch CSV")
 
 
 def main():
+    initialize_session_state()
     check_authentication()
 
-    if "table_name" not in st.session_state:
-        st.session_state.table_name = ""
-    if "update_clicked" not in st.session_state:
-        st.session_state.update_clicked = False
     user_id = st.session_state.user_id
     metadata = {
         "directions": {},

@@ -22,7 +22,7 @@ from utils import (
     DashboardReportMulti,
     DashboardReportSingle,
 )
-from components.authenticate import initialize_session_state, check_authentication
+from auth.authenticate import initialize_session_state, check_authentication
 
 initialize_session_state()
 
