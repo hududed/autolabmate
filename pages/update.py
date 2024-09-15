@@ -114,19 +114,42 @@ def main():
                     library(R.utils)
 
                     round_to_nearest <- function(x, metadata) {
-                        to_nearest = as.numeric(metadata$to_nearest)
+                        to_nearest = metadata$to_nearest
+                        x_columns = metadata$X_columns
+                        print("Metadata$to_nearest:")
+                        print(to_nearest)
+                        print("Metadata$X_columns:")
+                        print(x_columns)
+
+                        # Apply rounding only to metadata$X_columns 
                         if (is.data.table(x) || is.data.frame(x)) {
-                            x <- lapply(x, function(col) {
-                            if (is.numeric(col)) {
-                                return(round(col / to_nearest) * to_nearest)
-                            } else {
-                                return(col)
+                            for (col_name in names(x)) {
+                                if (col_name %in% x_columns) {
+                                    col = x[[col_name]]
+                                    if (is.numeric(col)) {
+                                        nearest = as.numeric(to_nearest[[col_name]])
+                                        print(paste("Column:", col_name))
+                                        print(paste("Nearest value:", nearest))
+                                        print("Values before rounding:")
+                                        print(col)
+                                        x[[col_name]] = round(col / nearest) * nearest
+                                        print("Values after rounding:")
+                                        print(x[[col_name]])
+                                    }
+                                } else {
+                                    print(paste("Skipping column:", col_name))
+                                }
                             }
-                            })
-                            x <- setDT(x) # Convert the list to a data.table
                         } else if (is.numeric(x)) {
-                            x <- round(x / to_nearest) * to_nearest
-                        }  else {
+                            nearest = as.numeric(to_nearest)
+                            print("Nearest value:")
+                            print(nearest)
+                            print("Values before rounding:")
+                            print(x)
+                            x <- round(x / nearest) * nearest
+                            print("Values after rounding:")
+                            print(x)
+                        } else {
                             stop("x must be a data.table, data.frame, or numeric vector")
                         }
                         return(x)
