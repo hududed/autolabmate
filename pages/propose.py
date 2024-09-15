@@ -121,19 +121,42 @@ def main():
             library(data.table)
 
             round_to_nearest <- function(x, metadata) {
-                to_nearest = as.numeric(metadata$to_nearest)
+                to_nearest = metadata$to_nearest
+                x_columns = metadata$X_columns
+                print("Metadata$to_nearest:")
+                print(to_nearest)
+                print("Metadata$X_columns:")
+                print(x_columns)
+
+                # Apply rounding only to metadata$X_columns 
                 if (is.data.table(x) || is.data.frame(x)) {
-                    x <- lapply(x, function(col) {
-                    if (is.numeric(col)) {
-                        return(round(col / to_nearest) * to_nearest)
-                    } else {
-                        return(col)
+                    for (col_name in names(x)) {
+                        if (col_name %in% x_columns) {
+                            col = x[[col_name]]
+                            if (is.numeric(col)) {
+                                nearest = as.numeric(to_nearest[[col_name]])
+                                print(paste("Column:", col_name))
+                                print(paste("Nearest value:", nearest))
+                                print("Values before rounding:")
+                                print(col)
+                                x[[col_name]] = round(col / nearest) * nearest
+                                print("Values after rounding:")
+                                print(x[[col_name]])
+                            }
+                        } else {
+                            print(paste("Skipping column:", col_name))
+                        }
                     }
-                    })
-                    x <- setDT(x) # Convert the list to a data.table
                 } else if (is.numeric(x)) {
-                    x <- round(x / to_nearest) * to_nearest
-                }  else {
+                    nearest = as.numeric(to_nearest)
+                    print("Nearest value:")
+                    print(nearest)
+                    print("Values before rounding:")
+                    print(x)
+                    x <- round(x / nearest) * nearest
+                    print("Values after rounding:")
+                    print(x)
+                } else {
                     stop("x must be a data.table, data.frame, or numeric vector")
                 }
                 return(x)
@@ -175,11 +198,20 @@ def main():
                     stop("archive$data must be a data.table")
                 }
 
+                print("Metadata$to_nearest:")
+                print(metadata$to_nearest)
+
                 min_value <- min
                 acq_function$surrogate$update()
                 acq_function$update()
+
                 candidate <- acq_optimizer$optimize()
+
+                print("Candidate after optimize before rounding:")
+                print(candidate)
+
                 candidate <- round_to_nearest(candidate, metadata)
+                print("Candidate after rounding:")
                 print(candidate)
 
                 tmp_archive = archive$clone(deep = TRUE)
@@ -193,6 +225,10 @@ def main():
                 }
 
                 candidate_new = candidate
+
+                print("Candidate_new before update loop:")
+                print(candidate_new)
+
                 for (i in seq_len(q)) {
 
                     # Predict y or y1 y2 for the new candidate
@@ -210,8 +246,6 @@ def main():
                         candidate[, (col_name) := NA]
                         }
                     }
-                    # print("candidate columns: ")
-                    # print(names(candidate))
 
                     # Add the predicted mean values [1] and their standard errors [2] to candidate_new
                     if (length(archive$cols_y) > 1) {
@@ -227,6 +261,9 @@ def main():
                     candidate_new <- update_and_optimize(acq_function, acq_optimizer,
                                                         tmp_archive, candidate_new,
                                                         min_values, metadata)
+                    
+                    print("Candidate_new after update_and_optimize:")
+                    print(candidate_new)
                     }
                 }
 
@@ -282,7 +319,6 @@ def main():
 
                     # Add the parameter to the search space
                     if (param_info == "float") {
-                        values = seq(lower, upper, by=as.numeric(metadata$to_nearest))
                         search_space_list[[param_name]] <- p_dbl(lower = lower, upper = upper)
                     } else if (param_info == "integer") {
                         search_space_list[[param_name]] <- p_int(lower = lower, upper = upper)

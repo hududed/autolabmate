@@ -1383,10 +1383,8 @@ def get_user_inputs(df: pd.DataFrame, metadata: Dict[str, Any]) -> tuple:
 
     # Get parameter ranges
     parameter_ranges = {}
-    # Get to_nearest_value
-    to_nearest_value = st.number_input(
-        "Enter the value to round to", min_value=0.01, value=0.01, step=0.01
-    )
+    to_nearest_values = {}
+
     for column in df.columns[: -len(output_column_names)]:
         if np.issubdtype(df[column].dtype, np.number):
             min_value = st.number_input(
@@ -1396,6 +1394,25 @@ def get_user_inputs(df: pd.DataFrame, metadata: Dict[str, Any]) -> tuple:
                 f"Enter the max value for {column}", value=df[column].max()
             )
             parameter_ranges[column] = (min_value, max_value)
+
+            # Get to_nearest_value for numeric parameters
+            if np.issubdtype(df[column].dtype, np.integer):
+                to_nearest_value = st.number_input(
+                    f"Enter the value to round {column} to",
+                    min_value=1,
+                    value=1,
+                    step=1,
+                )
+                to_nearest_values[column] = to_nearest_value
+            elif np.issubdtype(df[column].dtype, np.floating):
+                to_nearest_value = st.number_input(
+                    f"Enter the value to round {column} to",
+                    min_value=0.01,
+                    value=0.01,
+                    step=0.01,
+                )
+                to_nearest_values[column] = to_nearest_value
+
         elif np.issubdtype(df[column].dtype, object):
             categories = st.text_input(
                 f"Enter the categories for {column}",
@@ -1412,7 +1429,7 @@ def get_user_inputs(df: pd.DataFrame, metadata: Dict[str, Any]) -> tuple:
         parameter_info,
         parameter_ranges,
         directions,
-        to_nearest_value,
+        to_nearest_values,
     )
 
 
