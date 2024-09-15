@@ -18,7 +18,7 @@ from utils import (
 )
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
-
+import pandas as pd
 from datetime import datetime
 
 from components.authenticate import initialize_session_state, check_authentication
@@ -431,6 +431,12 @@ def main():
                 # Convert R data frame to pandas data frame
                 df_no_preds = ro.conversion.get_conversion().rpy2py(result_no_preds)
                 df_with_preds = ro.conversion.get_conversion().rpy2py(result_with_preds)
+
+            # Ensure integer columns remain as integers
+            for col in metadata["parameter_info"]:
+                if metadata["parameter_info"][col] == "integer":
+                    df_no_preds[col] = df_no_preds[col].astype(pd.Int64Dtype())
+                    df_with_preds[col] = df_with_preds[col].astype(pd.Int64Dtype())
 
             # Replace -2147483648 with np.nan if -2147483648 exists in the DataFrame
             replace_value_with_nan(df_no_preds)

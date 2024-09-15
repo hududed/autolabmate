@@ -442,6 +442,12 @@ def main():
                 df_no_preds = ro.conversion.get_conversion().rpy2py(data_no_preds)
                 df_with_preds = ro.conversion.get_conversion().rpy2py(data_with_preds)
 
+            # Ensure integer columns remain as integers
+            for col in metadata["parameter_info"]:
+                if metadata["parameter_info"][col] == "integer":
+                    df_no_preds[col] = df_no_preds[col].astype(pd.Int64Dtype())
+                    df_with_preds[col] = df_with_preds[col].astype(pd.Int64Dtype())
+
             num_rows_original = len(st.session_state.new_data)
             df_with_preds_subset = df_with_preds.iloc[:num_rows_original]
 
