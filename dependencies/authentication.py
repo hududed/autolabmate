@@ -1,21 +1,11 @@
-import os
 import supabase
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text, inspect
 import streamlit as st
 
+from db.database import supabase_client
+from config import settings
+
 load_dotenv()
-
-# Load Supabase credentials from .env file
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-
-# Initialize Supabase client
-supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
-PG_PASS = os.getenv("PG_PASS")
-DATABASE_URL = f"postgresql://postgres.zugnayzgayyoveqcmtcd:{PG_PASS}@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
-engine = create_engine(DATABASE_URL)
-inspector = inspect(engine)
 
 
 def initialize_session_state():
@@ -104,7 +94,8 @@ def refresh_jwt():
         new_session = supabase_client.auth.refresh_session(refresh_token)
         if new_session:
             new_jwt = new_session["access_token"]
+            supabase_url = settings.SUPABASE_URL
             # Reinitialize the Supabase client with the new JWT
-            supabase_client = supabase.create_client(SUPABASE_URL, new_jwt)
+            supabase_client = supabase.create_client(supabase_url, new_jwt)
             return new_jwt
     return None

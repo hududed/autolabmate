@@ -1,12 +1,13 @@
 import streamlit as st
-from components.authenticate import supabase_client, initialize_session_state
+from db.database import supabase_client
+from dependencies.authentication import initialize_session_state
 from st_pages import show_pages, Page
 from streamlit_extras.switch_page_button import switch_page
 from time import sleep
-from utils import (
-    enable_rls,
-    create_policy,
+from db.crud.table import (
     create_experiments_table,
+    enable_rls_for_table,
+    create_policy_for_table,
 )
 
 initialize_session_state()
@@ -99,11 +100,9 @@ def main():
 
     show_pages([Page("app.py", "home")])
 
-    # TODO: need to move to other cloud provider as streamlit cloud as r2u / r-cran-mlr3 is not supported
-
     create_experiments_table()
-    enable_rls("experiments")
-    create_policy("experiments")
+    enable_rls_for_table("experiments")
+    create_policy_for_table("experiments")
 
     # Display the login or sign-up form based on user selection
     form_choice = st.selectbox("Select an option:", ("Login", "Sign Up"))

@@ -1,26 +1,29 @@
 import streamlit as st
-from utils import (
-    compress_files,
-    get_table_names,
-    get_latest_data_for_table,
-    get_latest_data_and_metadata,
+from db.crud.table import get_table_names_by_user_id
+from db.crud.data import (
+    get_latest_data_metadata_by_user_id_table,
+    get_latest_data_metadata_table_by_user_id,
     insert_data,
-    py_dict_to_r_list,
-    replace_value_with_nan,
+)
+from utils.file import (
     retrieve_and_download_files,
+    compress_files,
     save_to_local,
     save_metadata,
     upload_local_to_bucket,
     upload_metadata_to_bucket,
-    validate_inputs,
 )
+from utils.rpy2_utils import py_dict_to_r_list
+from utils.input import validate_inputs
+from utils.dataframe import replace_value_with_nan
+
 import pandas as pd
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 
 from datetime import datetime
 
-from auth.authenticate import initialize_session_state, check_authentication
+from dependencies.authentication import initialize_session_state, check_authentication
 
 initialize_session_state()
 
@@ -38,7 +41,7 @@ def main():
 
     user_id = st.session_state.user_id
 
-    table_names = get_table_names(user_id)
+    table_names = get_table_names_by_user_id(user_id)
     if not table_names:
         st.write("No tables found.")
         return
@@ -46,7 +49,7 @@ def main():
     batch_number = st.number_input("Enter batch number", min_value=2, value=2, step=1)
 
     # Get the latest metadata
-    df_with_preds, metadata, latest_table = get_latest_data_and_metadata(
+    df_with_preds, metadata, latest_table = get_latest_data_metadata_table_by_user_id(
         user_id, batch_number
     )
     columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
@@ -58,7 +61,7 @@ def main():
     )
 
     if selected_table != default_table:
-        df_with_preds, metadata = get_latest_data_for_table(
+        df_with_preds, metadata = get_latest_data_metadata_by_user_id_table(
             user_id, selected_table, batch_number
         )
         columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
@@ -239,11 +242,20 @@ def main():
                             stop("archive$data must be a data.table")
                         }
 
+                        print("Metadata$to_nearest:")
+                        print(metadata$to_nearest)
+
                         min_value <- min
                         acq_function$surrogate$update()
                         acq_function$update()
+
                         candidate <- acq_optimizer$optimize()
+
+                        print("Candidate after optimize before rounding:")
+                        print(candidate)
+
                         candidate <- round_to_nearest(candidate, metadata)
+                        print("Candidate after rounding:")
                         print(candidate)
 
                         tmp_archive = archive$clone(deep = TRUE)
@@ -257,8 +269,12 @@ def main():
                         }
 
                         candidate_new = candidate
+
+                        print("Candidate_new before update loop:")
+                        print(candidate_new)
+
                         for (i in seq_len(q)) {
-                            
+
                             # Predict y or y1 y2 for the new candidate
                             prediction <- acq_function$surrogate$predict(candidate_new)
 
@@ -266,16 +282,15 @@ def main():
                             if (length(archive$cols_y) > 1) {
                                 col_names <- c(col_names, paste0(archive$cols_y[2], "_mean"), paste0(archive$cols_y[2], "_se"))
                             }
-                            print("Column names:")
-                            print(col_names)
+                            # print("Column names:")
+                            # print(col_names)
+
                             # Add new columns to candidate
                             for (col_name in col_names) {
-                            if (!col_name %in% names(candidate)) {
-                                candidate[, (col_name) := NA]
-                                }
+                                if (!col_name %in% names(candidate_new)) {
+                                    candidate_new[, (col_name) := NA]
+                                    }
                             }
-                            print("candidate columns: ")
-                            print(names(candidate))
 
                             # Add the predicted mean values [1] and their standard errors [2] to candidate_new
                             if (length(archive$cols_y) > 1) {
@@ -284,14 +299,22 @@ def main():
                             } else {
                             candidate_new[, (col_names) := .(prediction$mean[1], prediction$se[1])]
                             }
+
+                            print(paste("Iteration", i, "candidate_new before update_optimize:"))
+                            print(candidate_new)
+
                             if (i > 1) {
-                            candidate <- rbind(candidate, candidate_new, fill = TRUE)
+                                candidate <- rbind(candidate, candidate_new, fill = TRUE)
+                            } else {
+                                candidate <- candidate_new
                             }
                             if (i < q) {
-                            candidate_new <- update_and_optimize(acq_function, acq_optimizer,
-                                                                tmp_archive, candidate_new,
-                                                                min_values, metadata)
+                                candidate_new <- update_and_optimize(acq_function, acq_optimizer,
+                                                                    tmp_archive, candidate_new,
+                                                                    min_values, metadata)
                             }
+                            print("Candidate_new after update_and_optimize:")
+                            print(candidate_new)
                         }
 
                         # Iterate over each column in candidate
@@ -301,10 +324,10 @@ def main():
                                 candidate_new[[col]] <- format(round(candidate_new[[col]], 2), nsmall = 2)
                             }
                         }
-                        
+
                         save_archive(archive, acq_function, acq_optimizer, metadata)
                         return(list(candidate, archive, acq_function))
-                    } 
+                    }                    
 
                     experiment <- function(data, metadata) {
                         set.seed(metadata$seed)

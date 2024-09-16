@@ -1,27 +1,28 @@
 import streamlit as st
-from utils import (
-    compress_files,
-    display_dictionary,
-    get_latest_data_and_metadata,
-    get_latest_data_for_table,
-    get_user_inputs,
-    get_table_names,
+from db.crud.table import get_table_names_by_user_id
+from db.crud.data import (
+    get_latest_data_metadata_table_by_user_id,
+    get_latest_data_metadata_by_user_id_table,
     insert_data,
-    py_dict_to_r_list,
-    replace_value_with_nan,
+)
+from utils.file import (
     retrieve_and_download_files,
-    save_metadata,
+    compress_files,
     save_to_local,
+    save_metadata,
     upload_local_to_bucket,
     upload_metadata_to_bucket,
-    validate_inputs,
 )
+from utils.rpy2_utils import py_dict_to_r_list
+from utils.input import get_user_inputs, validate_inputs, display_dictionary
+from utils.dataframe import replace_value_with_nan
+
 import rpy2.robjects as ro
 from rpy2.robjects import pandas2ri
 import pandas as pd
 from datetime import datetime
 
-from auth.authenticate import initialize_session_state, check_authentication
+from dependencies.authentication import initialize_session_state, check_authentication
 
 initialize_session_state()
 
@@ -40,13 +41,15 @@ def main():
     st.warning("This section is still under development.")
 
     user_id = st.session_state.user_id
-    table_names = get_table_names(user_id)
+    table_names = get_table_names_by_user_id(user_id)
     if not table_names:
         st.write("No tables found.")
         return
 
     # Get the latest metadata
-    df_with_preds, metadata, latest_table = get_latest_data_and_metadata(user_id)
+    df_with_preds, metadata, latest_table = get_latest_data_metadata_table_by_user_id(
+        user_id
+    )
     columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
     df = df_with_preds[columns_to_keep]
 
@@ -59,7 +62,9 @@ def main():
     seed = st.number_input("Enter a seed", value=42, step=1)
 
     if selected_table != default_table:
-        df_with_preds, metadata = get_latest_data_for_table(user_id, selected_table)
+        df_with_preds, metadata = get_latest_data_metadata_by_user_id_table(
+            user_id, selected_table
+        )
         columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
         df = df_with_preds[columns_to_keep]
 
@@ -240,11 +245,12 @@ def main():
                     }
                     # print("Column names:")
                     # print(col_names)
+
                     # Add new columns to candidate
                     for (col_name in col_names) {
-                    if (!col_name %in% names(candidate)) {
-                        candidate[, (col_name) := NA]
-                        }
+                        if (!col_name %in% names(candidate_new)) {
+                            candidate_new[, (col_name) := NA]
+                            }
                     }
 
                     # Add the predicted mean values [1] and their standard errors [2] to candidate_new
@@ -254,17 +260,22 @@ def main():
                     } else {
                     candidate_new[, (col_names) := .(prediction$mean[1], prediction$se[1])]
                     }
+
+                    print(paste("Iteration", i, "candidate_new before update_optimize:"))
+                    print(candidate_new)
+
                     if (i > 1) {
-                    candidate <- rbind(candidate, candidate_new, fill = TRUE)
+                        candidate <- rbind(candidate, candidate_new, fill = TRUE)
+                    } else {
+                        candidate <- candidate_new
                     }
                     if (i < q) {
-                    candidate_new <- update_and_optimize(acq_function, acq_optimizer,
-                                                        tmp_archive, candidate_new,
-                                                        min_values, metadata)
-                    
+                        candidate_new <- update_and_optimize(acq_function, acq_optimizer,
+                                                            tmp_archive, candidate_new,
+                                                            min_values, metadata)
+                    }
                     print("Candidate_new after update_and_optimize:")
                     print(candidate_new)
-                    }
                 }
 
                 # Iterate over each column in candidate

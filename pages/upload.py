@@ -1,12 +1,9 @@
 import streamlit as st
 import pandas as pd
-from auth.authenticate import initialize_session_state, check_authentication
-from utils import (
-    insert_data,
-    upload_local_to_bucket,
-    save_to_local,
-    sanitize_column_names,
-)
+from dependencies.authentication import initialize_session_state, check_authentication
+from db.crud.data import insert_data
+from utils.dataframe import sanitize_column_names_for_table
+from utils.file import save_to_local, upload_local_to_bucket
 
 st.title("Upload first batch CSV")
 
@@ -44,7 +41,7 @@ def main():
 
                 # st.dataframe(df)
         if st.session_state.table_name != "":
-            df = sanitize_column_names(df)
+            df = sanitize_column_names_for_table(df)
             st.write(
                 "Column headers sanitized. The following table will be updated in the database."
             )

@@ -8,7 +8,7 @@ from auto_csv_generator.csv_handler import write_csv, download_csv
 from auto_csv_generator.csv_generator import (
     CSVGenerator,
 )
-from auth.authenticate import initialize_session_state, check_authentication
+from dependencies.authentication import initialize_session_state, check_authentication
 
 
 def main() -> None:

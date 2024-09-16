@@ -1,28 +1,36 @@
 from typing import Any, Dict
 import streamlit as st
 from functools import partial
-from utils import (
-    show_dashboard,
-    show_dashboard_multi,
-    show_interaction_pdp,
-    show_interaction_pdp_multi,
-    get_features,
-    get_table_names,
-    get_latest_data_for_table,
-    get_latest_data_and_metadata,
+from db.crud.table import get_table_names_by_user_id
+from db.crud.data import (
+    get_latest_data_metadata_by_user_id_table,
+    get_latest_data_metadata_table_by_user_id,
+)
+from utils.dashboard import (
+    plot_output_with_confidence,
+    plot_interaction_pdp,
+)
+from utils.ml import (
     train_model,
     train_model_multi,
     feature_importance,
     feature_importance_multi,
-    plot_output_with_confidence,
+)
+from utils.dashboard import (
+    show_dashboard,
+    show_dashboard_multi,
+    show_interaction_pdp,
+    show_interaction_pdp_multi,
+)
+from utils.reports import (
+    DashboardReportMulti,
+    DashboardReportSingle,
     report_pairplot,
     report_output_with_confidence,
     report_pdp,
-    plot_interaction_pdp,
-    DashboardReportMulti,
-    DashboardReportSingle,
 )
-from auth.authenticate import initialize_session_state, check_authentication
+from utils.dataframe import get_features
+from dependencies.authentication import initialize_session_state, check_authentication
 
 initialize_session_state()
 
@@ -34,13 +42,15 @@ def main():
 
     user_id = st.session_state.user_id
 
-    table_names = get_table_names(user_id)
+    table_names = get_table_names_by_user_id(user_id)
     if not table_names:
         st.write("No tables found.")
         return
 
     # Get the latest metadata
-    df_with_preds, metadata, latest_table = get_latest_data_and_metadata(user_id)
+    df_with_preds, metadata, latest_table = get_latest_data_metadata_table_by_user_id(
+        user_id
+    )
     columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
     df = df_with_preds[columns_to_keep]
 
@@ -50,7 +60,9 @@ def main():
     )
 
     if selected_table != default_table:
-        df_with_preds, metadata = get_latest_data_for_table(user_id, selected_table)
+        df_with_preds, metadata = get_latest_data_metadata_by_user_id_table(
+            user_id, selected_table
+        )
         columns_to_keep = metadata["X_columns"] + metadata["output_column_names"]
         df = df_with_preds[columns_to_keep]
 
