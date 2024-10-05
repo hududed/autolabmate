@@ -28,7 +28,7 @@ def get_parameter_ranges(
     for i in range(len(param_names)):
         if param_types[i] == "Integer":
             to_nearest = st.number_input(
-                f"Enter the to_nearest value for {param_names[i]} (must be > 0):",
+                f"Enter the interval for {param_names[i]} (must be > 0):",
                 value=1.0,
                 min_value=1.0,
                 step=1.0,
@@ -52,7 +52,7 @@ def get_parameter_ranges(
             param_intervals.append(to_nearest)
         elif param_types[i] == "Float":
             to_nearest = st.number_input(
-                f"Enter the to_nearest value for {param_names[i]} (must be > 0):",
+                f"Enter the interval for {param_names[i]} (must be > 0):",
                 value=0.1,
                 min_value=0.01,
                 format="%.2f",
