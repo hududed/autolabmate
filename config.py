@@ -18,7 +18,7 @@ env_configs = {
         "frontend_url": "http://app.autolabmate.local:3000",
     },
     "production": {
-        "domain": "auto.com",
+        "domain": "autolabmate.com",
         "backend_url": "https://api.autolabmate.com",
         "frontend_url": "https://app.autolabmate.com",
     },

@@ -37,6 +37,7 @@ RUN apt-get update && apt-get install -y \
     libfribidi-dev \
     tcl-dev \
     tk-dev \
+    ca-certificates \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -47,7 +48,8 @@ ENV R_HOME=/usr/local/lib/R
 ENV PORT=8080
 
 # Download and install R from source
-RUN curl -O https://cran.r-project.org/src/base/R-4/R-4.3.1.tar.gz \
+RUN apt-get update && apt-get install -y curl \
+    && curl -O https://cran.r-project.org/src/base/R-4/R-4.3.1.tar.gz --retry 5 --retry-delay 5 \
     && tar -xf R-4.3.1.tar.gz \
     && cd R-4.3.1 \
     && ./configure --with-blas --with-lapack --with-readline=no --with-x=no --enable-R-shlib \
@@ -71,8 +73,6 @@ COPY install_packages.R /tmp/install_packages.R
 
 # Run the R script to install packages
 RUN Rscript /tmp/install_packages.R
-
-# RUN R -e "devtools::install_version('mlr3mbo', version = '0.2.2', repos='http://cran.rstudio.com/')"
 
 # # Install specific mlr3 packages with exact versions
 RUN R -e "remotes::install_github('mlr-org/mlr3extralearners@*release')"
