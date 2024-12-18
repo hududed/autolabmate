@@ -1,11 +1,13 @@
-from sqlalchemy import text
-from db.database import engine
-import pandas as pd
-from typing import Dict, Any, Tuple
 import json
+from typing import Any, Dict, Tuple
+
+import pandas as pd
 import simplejson
 import streamlit as st
-from datetime import datetime
+from sqlalchemy import text
+
+from db.database import engine
+from utils.io import generate_timestamps
 
 
 def get_latest_data_metadata_table_by_user_id(
@@ -137,4 +139,8 @@ def insert_data(
             },
         )
         conn.commit()
-    st.write(f'Data "{table_name}" inserted into Experiments table at {datetime.now()}')
+
+    _, display_timestamp = generate_timestamps()
+    st.write(
+        f'Data "{table_name}" inserted into Experiments table at {display_timestamp}'
+    )

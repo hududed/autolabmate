@@ -1,32 +1,49 @@
+import pandas as pd
+import rpy2.robjects as ro
 import streamlit as st
-from db.crud.table import get_table_names_by_user_id
+from rpy2.robjects import pandas2ri
+
 from db.crud.data import (
-    get_latest_data_metadata_table_by_user_id,
     get_latest_data_metadata_by_user_id_table,
+    get_latest_data_metadata_table_by_user_id,
     insert_data,
 )
+from db.crud.table import get_table_names_by_user_id
+from dependencies.authentication import (
+    check_authentication,
+    clear_session_state,
+    initialize_session_state,
+)
+from utils.dataframe import replace_value_with_nan
 from utils.file import (
-    retrieve_and_download_files,
     compress_files,
-    save_to_local,
+    retrieve_and_download_files,
     save_metadata,
+    save_to_local,
     upload_local_to_bucket,
     upload_metadata_to_bucket,
 )
+from utils.io import (
+    display_dictionary,
+    generate_timestamps,
+    get_user_inputs,
+    validate_inputs,
+)
 from utils.rpy2_utils import py_dict_to_r_list
-from utils.input import get_user_inputs, validate_inputs, display_dictionary
-from utils.dataframe import replace_value_with_nan
-
-import rpy2.robjects as ro
-from rpy2.robjects import pandas2ri
-import pandas as pd
-from datetime import datetime
-
-from dependencies.authentication import initialize_session_state, check_authentication
 
 initialize_session_state()
 
+# Clear update_page_loaded flag when loading the propose page
+if "update_page_loaded" in st.session_state:
+    del st.session_state.update_page_loaded
+
 st.title("Propose Experiment")
+
+if not st.session_state.propose_page_loaded:
+    st.session_state.propose_page_loaded = True
+    clear_session_state(
+        ["df_no_preds", "messages", "zip_buffer", "output_zip", "update_clicked"]
+    )
 
 
 def main():
@@ -35,12 +52,8 @@ def main():
     if "button_start_ml" not in st.session_state or st.session_state.button_start_ml:
         st.session_state.button_start_ml = False
 
-    if "download_triggered" not in st.session_state:
-        st.session_state.download_triggered = False
-
-    st.warning("This section is still under development.")
-
     user_id = st.session_state.user_id
+
     table_names = get_table_names_by_user_id(user_id)
     if not table_names:
         st.write("No tables found.")
@@ -169,8 +182,8 @@ def main():
 
             save_archive <- function(archive, acq_function, acq_optimizer, metadata) {
                 # Get the current timestamp
-                timestamp = format(Sys.time(), "%Y%m%d%H%M%S")
-
+                timestamp <- format(Sys.time(), "%Y%m%d-%H%M")
+                
                 # Define the directory path
                 dir_path = paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", metadata$batch_number)
 
@@ -466,9 +479,12 @@ def main():
                 file_extension=".rds",
             )
 
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            filename_no_preds = f"{timestamp}_{batch_number}-data.csv"
-            filename_with_preds = f"{timestamp}_{batch_number}-data-with-preds.csv"
+            filename_timestamp, display_timestamp = generate_timestamps()
+
+            filename_no_preds = f"{filename_timestamp}_{batch_number}-data.csv"
+            filename_with_preds = (
+                f"{filename_timestamp}_{batch_number}-data-with-preds.csv"
+            )
 
             save_to_local(
                 bucket_name,
@@ -502,35 +518,52 @@ def main():
             st.write(f"Files retrieved: {[file['name'] for file in downloaded_files]}")
 
             # Compress the files
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            output_zip = f"{timestamp}_{batch_number}_data.zip"
+            output_zip = f"{filename_timestamp}_{batch_number}_data.zip"
             zip_buffer = compress_files(downloaded_files)
+
             st.write(f"Files compressed into: {output_zip}")
 
-            st.download_button(
-                label="Download compressed data",
-                data=zip_buffer.getvalue(),
-                file_name=output_zip,
-                mime="application/zip",
-            )
+            # Store the zip buffer and output zip name in session state
+            st.session_state.zip_buffer = zip_buffer
+            st.session_state.output_zip = output_zip
+            st.session_state.df_no_preds = df_no_preds
 
             # TODO: NaN appears as min largest value
-            # st.write(f"Table {table_name} has been updated.")
             st.session_state.update_clicked = False
             st.session_state.button_start_ml = False
 
-            print(df_no_preds)
-            st.write(df_no_preds)
-
-            st.write(
+            # Store messages in session state
+            st.session_state.messages.append(
                 "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"
             )
-            st.write(
-                f"Files downloaded to local directory: /{bucket_name}/{user_id}/{selected_table}/{batch_number}"
+            # Generate a human-readable timestamp
+            st.session_state.messages.append(
+                f"Files downloaded to local directory at {display_timestamp}: /{bucket_name}/{user_id}/{selected_table}/{batch_number}"
             )
-            st.write(
+            st.session_state.messages.append(
                 "Run the proposed batch of experiments and proceed to `update` the model."
             )
+
+    # Display stored messages
+    for message in st.session_state.messages:
+        st.write(message)
+
+    # Display df_no_preds if it exists in session state
+    if st.session_state.df_no_preds is not None:
+        print(st.session_state.df_no_preds)
+        st.write(st.session_state.df_no_preds)
+
+    # Add the download button outside the if block to ensure it is always available
+    if (
+        st.session_state.zip_buffer is not None
+        and st.session_state.output_zip is not None
+    ):
+        st.download_button(
+            label="Download compressed data",
+            data=st.session_state.zip_buffer.getvalue(),
+            file_name=st.session_state.output_zip,
+            mime="application/zip",
+        )
 
 
 if __name__ == "__main__":

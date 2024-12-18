@@ -1,9 +1,11 @@
-import streamlit as st
 import pandas as pd
-from dependencies.authentication import initialize_session_state, check_authentication
+import streamlit as st
+
 from db.crud.data import insert_data
+from dependencies.authentication import check_authentication, initialize_session_state
 from utils.dataframe import sanitize_column_names_for_table
 from utils.file import save_to_local, upload_local_to_bucket
+from utils.io import sanitize_table_name
 
 st.title("Upload first batch CSV")
 
@@ -37,6 +39,8 @@ def main():
                 and table_name != ""
                 and confirm_upload
             ):
+                # Sanitize the table name
+                table_name = sanitize_table_name(table_name)
                 st.session_state.table_name = table_name
 
                 # st.dataframe(df)
@@ -90,16 +94,17 @@ def main():
             # Display a warning message
 
             st.session_state.update_clicked = True
-
-            insert_data(table_name, df, user_id, metadata)
+            insert_data(st.session_state.table_name, df, user_id, metadata)
 
             bucket_name = "test-bucket"
             file.seek(0)  # Reset the file pointer to the beginning
             df = pd.read_csv(file)
             output_file_name = "raw-data.csv"
-            save_to_local(bucket_name, user_id, table_name, output_file_name, df)
+            save_to_local(
+                bucket_name, user_id, st.session_state.table_name, output_file_name, df
+            )
             upload_local_to_bucket(
-                bucket_name, user_id, table_name, file_extension=".csv"
+                bucket_name, user_id, st.session_state.table_name, file_extension=".csv"
             )
             st.write("Head to `dashboard` to see your data! :fire:")
 

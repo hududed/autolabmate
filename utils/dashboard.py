@@ -1,18 +1,16 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-from numpy.random import RandomState
+from typing import Any, Dict, List, Tuple
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
+import streamlit as st
+from matplotlib.figure import Figure
+from numpy.random import RandomState
 from plotly.subplots import make_subplots
 from scipy.stats import gaussian_kde
-from typing import List, Dict, Any, Tuple
-from matplotlib.figure import Figure
-
-from sklearn.inspection import partial_dependence
-from sklearn.inspection import PartialDependenceDisplay
 from sklearn.ensemble import RandomForestRegressor
-
+from sklearn.inspection import PartialDependenceDisplay, partial_dependence
 
 SEED = 42
 rng = RandomState(SEED)
@@ -29,7 +27,7 @@ def highlight_max(df: pd.DataFrame, direction: str) -> pd.DataFrame:
     Returns:
     df: The DataFrame with the maximum or minimum value in the last column highlighted.
     """
-    if direction == "max":
+    if direction == "maximize":
         return df.style.highlight_max(subset=[df.columns[-1]])
     else:
         return df.style.highlight_min(subset=[df.columns[-1]])

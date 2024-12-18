@@ -1,9 +1,9 @@
+import streamlit as st
 import supabase
 from dotenv import load_dotenv
-import streamlit as st
 
-from db.database import supabase_client
 from config import settings
+from db.database import supabase_client
 
 load_dotenv()
 
@@ -27,6 +27,29 @@ def initialize_session_state():
         st.session_state.table_name = ""
     if "update_clicked" not in st.session_state:
         st.session_state.update_clicked = False
+    if "propose_page_loaded" not in st.session_state:
+        st.session_state.propose_page_loaded = False
+    if "update_page_loaded" not in st.session_state:
+        st.session_state.update_page_loaded = False
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    if "df_no_preds" not in st.session_state:
+        st.session_state.df_no_preds = None
+    if "zip_buffer" not in st.session_state:
+        st.session_state.zip_buffer = None
+
+
+def clear_session_state(keys):
+    for key in keys:
+        if key in st.session_state:
+            if key == "messages":
+                st.session_state[key] = []
+            elif key == "df_no_preds" or key == "zip_buffer":
+                st.session_state[key] = None
+            elif key == "update_clicked":
+                st.session_state[key] = False
+            else:
+                st.session_state[key] = None
 
 
 def check_authentication():

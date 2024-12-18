@@ -1,20 +1,19 @@
-import streamlit as st
-import os
-import pandas as pd
-from numpy.random import RandomState
-from typing import List, Dict, Any
-from pathlib import Path
 import json
-from datetime import datetime
-from tenacity import retry, stop_after_attempt, wait_fixed
-from io import BytesIO
+import os
 import zipfile
+from io import BytesIO
+from pathlib import Path
+from typing import Any, Dict, List
 
-
+import pandas as pd
+import streamlit as st
+from numpy.random import RandomState
 from storage3.utils import StorageException
+from tenacity import retry, stop_after_attempt, wait_fixed
 
-from dependencies.authentication import refresh_jwt
 from db.database import supabase_client
+from dependencies.authentication import refresh_jwt
+from utils.io import generate_timestamps
 
 SEED = 42
 rng = RandomState(SEED)
@@ -200,10 +199,10 @@ def upload_metadata_to_bucket(metadata: Dict[str, Any], batch_number: int = 1):
     metadata_content = json.dumps(metadata).encode()
 
     # Get the current timestamp
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    filename_timestamp, _ = generate_timestamps()
 
     # Define the file name
-    metadata_file_name = f"metadata-{timestamp}.json"
+    metadata_file_name = f"metadata-{filename_timestamp}.json"
 
     # Upload the metadata to the bucket
     upload_to_bucket(

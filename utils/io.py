@@ -1,7 +1,10 @@
-import streamlit as st
-import pandas as pd
+import re
+from datetime import datetime
+from typing import Any, Dict, List, Tuple
+
 import numpy as np
-from typing import List, Dict, Any, Tuple
+import pandas as pd
+import streamlit as st
 
 
 def get_user_inputs(df: pd.DataFrame, metadata: Dict[str, Any]) -> Tuple:
@@ -164,3 +167,26 @@ def display_dictionary(
     with st.expander("Show metadata", expanded=False):
         st.write(display_metadata)
     return metadata
+
+
+def sanitize_table_name(table_name: str) -> str:
+    # Replace spaces with hyphens
+    sanitized_name = table_name.replace(" ", "-")
+    # Optionally, you can also remove any characters that are not alphanumeric or hyphens
+    sanitized_name = re.sub(r"[^a-zA-Z0-9-]", "", sanitized_name)
+    return sanitized_name
+
+
+def generate_timestamps():
+    """
+    Generate two versions of timestamps:
+    - One for filenames (e.g., 20241218-0806_1-data)
+    - One for display (e.g., Data inserted at Dec 18 2024 8:06AM)
+
+    Returns:
+        tuple: (filename_timestamp, display_timestamp)
+    """
+    now = datetime.now()
+    filename_timestamp = now.strftime("%Y%m%d-%H%M")
+    display_timestamp = now.strftime("%b %d %Y %I:%M%p")
+    return filename_timestamp, display_timestamp
