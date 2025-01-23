@@ -351,7 +351,7 @@ def plot_interaction_pdp(
 
         fig, ax = plt.subplots(figsize=(8, 6))
         # Compute the interaction PDP
-        display = PartialDependenceDisplay.from_estimator(
+        _ = PartialDependenceDisplay.from_estimator(
             model, X, [features], kind="average", random_state=rng, ax=ax
         )
 
