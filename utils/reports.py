@@ -1,20 +1,18 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-from numpy.random import RandomState
-import matplotlib.pyplot as plt
-import seaborn as sns
-from typing import List, Dict, Any, Tuple, Callable
+import itertools
+from abc import ABC, abstractmethod
 from io import BytesIO
+from typing import Any, Callable, Dict, List, Tuple
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import streamlit as st
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
-import itertools
-
-from sklearn.inspection import partial_dependence
+from numpy.random import RandomState
 from sklearn.ensemble import RandomForestRegressor
-
-from abc import ABC, abstractmethod
-
+from sklearn.inspection import partial_dependence
 
 SEED = 42
 rng = RandomState(SEED)
@@ -111,11 +109,11 @@ def report_pdp(
         pdp_results = partial_dependence(model, X, features=[feature], kind="both")
         pdp_values = pdp_results["average"][0]
         ice_values = pdp_results["individual"][0]
-        feature_values = pdp_results["values"][0]
+        grid_values = pdp_results["grid_values"][0]
 
         # PDP line
         ax.plot(
-            feature_values,
+            grid_values,
             pdp_values,
             label="PDP",
             color="orange",
@@ -125,7 +123,7 @@ def report_pdp(
 
         # ICE lines
         for ice_line in ice_values:
-            ax.plot(feature_values, ice_line, color="grey", linewidth=0.5, alpha=0.3)
+            ax.plot(grid_values, ice_line, color="grey", linewidth=0.5, alpha=0.3)
 
         ax.set_title(feature)
         ax.set_xlabel("Feature Value")

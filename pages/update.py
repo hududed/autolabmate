@@ -555,9 +555,7 @@ def main():
             st.session_state.messages.append(
                 "Your next batch of experiments to run are ready! :fire: \n Remember to check your data in `dashboard` before running the next campaign. Happy experimenting!"
             )
-            st.session_state.messages.append(
-                f"Files downloaded to local directory at {display_timestamp}: /{bucket_name}/{user_id}/{selected_table}/{batch_number}"
-            )
+
             st.session_state.messages.append(
                 "Run the proposed batch of experiments and proceed to `update` the model."
             )

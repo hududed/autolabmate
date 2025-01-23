@@ -259,11 +259,13 @@ def plot_pdp(
         pdp_results = partial_dependence(model, X, features=[i], kind="both")
         pdp_values = pdp_results["average"][0]
         ice_values = pdp_results["individual"][0]
+        # Use 'grid_values' instead of 'values'
+        grid_values = pdp_results["grid_values"][0]
 
         # Add PDP line
         fig.add_trace(
             go.Scatter(
-                x=pdp_results["values"][0],
+                x=grid_values,
                 y=pdp_values,
                 mode="lines",
                 name="Average",
@@ -280,7 +282,7 @@ def plot_pdp(
         for j, ice_line in enumerate(ice_values):
             fig.add_trace(
                 go.Scatter(
-                    x=pdp_results["values"][0],
+                    x=grid_values,
                     y=ice_line,
                     mode="lines",
                     name="ICE"
