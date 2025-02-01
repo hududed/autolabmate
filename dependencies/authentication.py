@@ -37,6 +37,10 @@ def initialize_session_state():
         st.session_state.df_no_preds = None
     if "zip_buffer" not in st.session_state:
         st.session_state.zip_buffer = None
+    if "expander_what_in_file" not in st.session_state:
+        st.session_state.expander_what_in_file = None
+    if "expander_usage_examples" not in st.session_state:
+        st.session_state.expander_usage_examples = None
 
 
 def clear_session_state(keys):
@@ -46,6 +50,10 @@ def clear_session_state(keys):
                 st.session_state[key] = []
             elif key == "df_no_preds" or key == "zip_buffer":
                 st.session_state[key] = None
+            elif key == "expander_what_in_file":
+                st.session_state[key] = False
+            elif key == "expander_usage_examples":
+                st.session_state[key] = False
             elif key == "update_clicked":
                 st.session_state[key] = False
             else:

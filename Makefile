@@ -5,6 +5,7 @@ IMAGE_NAME = gcr.io/autolabmate-430603/streamlit-app
 CONTAINER_NAME = streamlit
 REGION = us-central1
 SERVICE_NAME = autolabmate
+STAGING_SERVICE_NAME = autolabmate-staging
 
 # Targets
 build-docker-containers-local:
@@ -26,6 +27,14 @@ build-and-push:
 deploy:
 	gcloud run deploy $(SERVICE_NAME) --image $(IMAGE_NAME) --allow-unauthenticated --region $(REGION)
 
+deploy-staging:
+	gcloud run deploy $(STAGING_SERVICE_NAME) --image $(IMAGE_NAME) --allow-unauthenticated --region $(REGION)
+
+delete-staging:
+	gcloud run services delete $(STAGING_SERVICE_NAME) --region $(REGION) --quiet
+
 all: build-and-push deploy
 
 local: build-docker-containers-local run-docker-containers-local
+
+staging: build-and-push deploy-staging

@@ -37,7 +37,15 @@ st.title("Update Experiment")
 if not st.session_state.update_page_loaded:
     st.session_state.update_page_loaded = True
     clear_session_state(
-        ["df_no_preds", "messages", "zip_buffer", "output_zip", "update_clicked"]
+        [
+            "df_no_preds",
+            "messages",
+            "zip_buffer",
+            "output_zip",
+            "update_clicked",
+            "expanded_ what_in_file",
+            "expanded_usage_examples",
+        ]
     )
 
 
@@ -488,7 +496,6 @@ def main():
             replace_value_with_nan(df_with_preds)
 
             save_metadata(metadata, user_id, selected_table, batch_number)
-            st.write("Saving metadata to local file")
 
             upload_local_to_bucket(bucket_name, user_id, selected_table, batch_number)
 
@@ -527,12 +534,10 @@ def main():
             downloaded_files = retrieve_and_download_files(
                 bucket_name, user_id, selected_table, batch_number
             )
-            st.write(f"Files retrieved: {[file['name'] for file in downloaded_files]}")
 
             # Compress the files
             output_zip = f"{filename_timestamp}_{batch_number}_data.zip"
             zip_buffer = compress_files(downloaded_files)
-            st.write(f"Files compressed into: {output_zip}")
 
             # Store the zip buffer, output zip name, and df_no_preds in session state
             st.session_state.zip_buffer = zip_buffer
@@ -559,6 +564,8 @@ def main():
             st.session_state.messages.append(
                 "Run the proposed batch of experiments and proceed to `update` the model."
             )
+            st.session_state.expander_what_in_file = True
+            st.session_state.expander_usage_examples = True
 
     # Display stored messages
     for message in st.session_state.messages:
@@ -580,6 +587,44 @@ def main():
             file_name=st.session_state.output_zip,
             mime="application/zip",
         )
+    if st.session_state.expander_what_in_file:
+        with st.expander("❓ What's in the file ?", expanded=False):
+            st.write("""
+            **1. `archive-{}.rds` (Optimization Archive)**
+            - **Contains:** Evaluated hyperparameter configurations (`xdt`), objective function values (`ydt`), search space definitions, and codomain constraints.
+            - **Purpose:** Stores the history of evaluations for analysis, debugging, and incremental updates. It acts as the main record for tracking Bayesian optimization progress.
+
+            **2. `acqopt-{}.rds` (Acquisition Optimizer)**
+            - **Contains:** The optimizer responsible for searching new candidate points, including the optimization method (`random_search`, `DIRECT`, etc.) and termination criteria.
+            - **Purpose:** Ensures efficient candidate search in the hyperparameter space based on acquisition function guidance.
+
+            **3. `acqf-{}.rds` (Acquisition Function)**
+            - **Contains:** The acquisition function type (`ei`, `ehvi`, etc.) and surrogate model predictions.
+            - **Purpose:** Determines the most promising points to evaluate, balancing exploration (searching new areas) and exploitation (refining best-known regions).
+            """)
+    if st.session_state.expander_usage_examples:
+        with st.expander("💻 Usage examples", expanded=False):
+            st.write("""
+            ```r
+            # Load and inspect the archive
+            archive <- readRDS("path/to/archive-20250131-1200.rds")
+            print(archive$data)  # View stored hyperparameter configurations
+            best_config <- archive$best()
+            print(best_config)  # Extract best-performing configuration
+
+            # Use the acquisition function
+            acq_function <- readRDS("path/to/acqf-20250131-1200.rds")
+            acq_function$surrogate$update()
+            acq_function$update()
+            candidate_score <- acq_function$eval_dt(new_candidate)
+            print(candidate_score)  # Evaluate candidate
+
+            # Optimize using the acquisition optimizer
+            acq_optimizer <- readRDS("path/to/acqopt-20250131-1200.rds")
+            candidate <- acq_optimizer$optimize()
+            print(candidate)  # Get next candidate
+            ```
+            """)
 
 
 if __name__ == "__main__":

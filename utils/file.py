@@ -132,43 +132,41 @@ def upload_local_to_bucket(
     # Extract file name from file path
     base_path = Path(f"{bucket_name}/{user_id}/{table_name}/{batch_number}")
     files = [file for file in base_path.glob(f"*{file_extension}")]
+    with st.spinner("Preparing files for download..."):
+        for file in files:
+            file_name = file.name
+            new_file_name = f"{user_id}/{table_name}/{batch_number}/{file_name}"
 
-    for file in files:
-        file_name = file.name
-        new_file_name = f"{user_id}/{table_name}/{batch_number}/{file_name}"
+            # Read file content
+            with open(file, "rb") as f:
+                file_content = f.read()
 
-        # Read file content
-        with open(file, "rb") as f:
-            file_content = f.read()
-
-        try:
-            # Upload file to bucket
-            supabase_client.storage.from_(bucket_name).upload(
-                new_file_name, file_content
-            )
-            print(new_file_name)
-            st.write(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
-        except StorageException as e:
-            if "jwt expired" in str(e):
-                # Refresh the JWT and retry the upload
-                new_jwt = refresh_jwt()
-                if new_jwt:
-                    supabase_client.storage.from_(bucket_name).upload(
-                        new_file_name, file_content
+            try:
+                # Upload file to bucket
+                supabase_client.storage.from_(bucket_name).upload(
+                    new_file_name, file_content
+                )
+                print(new_file_name)
+                print(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
+            except StorageException as e:
+                if "jwt expired" in str(e):
+                    # Refresh the JWT and retry the upload
+                    new_jwt = refresh_jwt()
+                    if new_jwt:
+                        supabase_client.storage.from_(bucket_name).upload(
+                            new_file_name, file_content
+                        )
+                        print(new_file_name)
+                        print(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
+                    else:
+                        raise e
+                elif "Duplicate" in str(e):
+                    print(
+                        f'File "{new_file_name}" already exists in bucket "{bucket_name}", skipping upload'
                     )
-                    print(new_file_name)
-                    st.write(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
                 else:
                     raise e
-            elif "Duplicate" in str(e):
-                print(
-                    f'File "{new_file_name}" already exists in bucket "{bucket_name}", skipping upload'
-                )
-                st.write(
-                    f'File "{new_file_name}" already exists in bucket "{bucket_name}", skipping upload'
-                )
-            else:
-                raise e
+    st.success("Files ready for download!")
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
@@ -181,13 +179,10 @@ def upload_to_bucket(
     try:
         # Upload file to bucket
         supabase_client.storage.from_(bucket_name).upload(new_file_name, file_content)
-        st.write(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
+        print(f'"{new_file_name}" uploaded to bucket "{bucket_name}"')
     except Exception as e:
         if "Duplicate" in str(e):
             print(
-                f'File "{new_file_name}" already exists in bucket "{bucket_name}", skipping upload'
-            )
-            st.write(
                 f'File "{new_file_name}" already exists in bucket "{bucket_name}", skipping upload'
             )
         else:
