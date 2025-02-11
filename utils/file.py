@@ -132,7 +132,7 @@ def upload_local_to_bucket(
     # Extract file name from file path
     base_path = Path(f"{bucket_name}/{user_id}/{table_name}/{batch_number}")
     files = [file for file in base_path.glob(f"*{file_extension}")]
-    with st.spinner("Preparing files for download..."):
+    with st.spinner("Processing files..."):
         for file in files:
             file_name = file.name
             new_file_name = f"{user_id}/{table_name}/{batch_number}/{file_name}"
@@ -166,7 +166,7 @@ def upload_local_to_bucket(
                     )
                 else:
                     raise e
-    st.success("Files ready for download!")
+    st.success("Processing complete!")
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))

@@ -1,0 +1,43 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: autolabmate-staging
+  namespace: '725561495777'
+  labels:
+    cloud.googleapis.com/location: us-east1
+  annotations:
+    serving.knative.dev/creator: fhantzali@gmail.com
+    serving.knative.dev/lastModifier: fhantzali@gmail.com
+    run.googleapis.com/client-name: gcloud
+    run.googleapis.com/client-version: 492.0.0
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      labels:
+        run.googleapis.com/startupProbeType: Custom 
+      annotations:
+        autoscaling.knative.dev/maxScale: '1'
+        run.googleapis.com/startup-cpu-boost: 'true'
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 600
+      serviceAccountName: 725561495777-compute@developer.gserviceaccount.com
+      containers:
+      - image: gcr.io/autolabmate-430603/streamlit-app
+        ports:
+        - name: http1
+          containerPort: 8080
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+        startupProbe:
+          timeoutSeconds: 240
+          periodSeconds: 240
+          failureThreshold: 10
+          tcpSocket:
+            port: 8080
+  traffic:
+  - percent: 100
+    latestRevision: true
