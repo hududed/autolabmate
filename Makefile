@@ -6,8 +6,13 @@ CONTAINER_NAME = streamlit
 REGION = us-east1
 SERVICE_NAME = autolabmate
 STAGING_SERVICE_NAME = autolabmate-staging
+PROJECT_ID = autolabmate-430603
 
 # Targets
+auth-gcloud:
+	gcloud auth login --quiet
+	gcloud config set project $(PROJECT_ID)
+
 build-docker-containers-local:
 	docker build --platform $(LOCAL_PLATFORM) -t $(IMAGE_NAME) .
 

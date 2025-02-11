@@ -20,6 +20,7 @@ cyclocomp,1.1.1
 data.table,1.15.4
 datasets,4.4.1
 desc,1.4.3
+DiceKriging,1.6.0
 digest,0.6.36
 evaluate,0.24.0
 fansi,1.0.6
@@ -89,6 +90,7 @@ Rcpp,1.0.13
 RcppEigen,0.3.4.0.0
 remotes,2.5.0
 rex,1.2.1
+rgenoud,5.9.0.11
 rlang,1.1.4
 roxygen2,7.3.2
 rpart,4.1.23
