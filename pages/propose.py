@@ -156,7 +156,7 @@ def main():
 
         if st.session_state.button_start_ml:
             ro.r(
-                """
+                r"""
             library(mlr3mbo)
             library(mlr3)
             library(mlr3learners)
@@ -171,7 +171,6 @@ def main():
                 print("Metadata$X_columns:")
                 print(x_columns)
 
-                # Apply rounding only to metadata$X_columns 
                 if (is.data.table(x) || is.data.frame(x)) {
                     for (col_name in names(x)) {
                         if (col_name %in% x_columns) {
@@ -182,7 +181,12 @@ def main():
                                 print(paste("Nearest value:", nearest))
                                 print("Values before rounding:")
                                 print(col)
-                                x[[col_name]] = round(col / nearest) * nearest
+                                rounded_val = round(col / nearest) * nearest
+                                if (nearest < 1) {
+                                    decimals = nchar(sub("0\\.", "", as.character(nearest)))
+                                    rounded_val = as.numeric(format(rounded_val, nsmall = decimals))
+                                }
+                                x[[col_name]] = rounded_val
                                 print("Values after rounding:")
                                 print(x[[col_name]])
                             }
@@ -203,7 +207,7 @@ def main():
                     stop("x must be a data.table, data.frame, or numeric vector")
                 }
                 return(x)
-            }
+                }
 
             save_archive <- function(archive, acq_function, acq_optimizer, metadata) {
                 timestamp <- format(Sys.time(), "%Y%m%d-%H%M")
@@ -414,6 +418,10 @@ def main():
             }
             """
             )
+
+            # Gaussian Process requires columns to be float
+            for col in metadata["output_column_names"]:
+                df[col] = df[col].astype(float)
 
             pandas2ri.activate()
             converter = ro.default_converter + pandas2ri.converter

@@ -122,7 +122,7 @@ def main():
                     # TODO: data is then saved save_to_local with user input batch_number. path should be e.g. test-bucket/{table_name}/{batch_number}/*.csv
 
                     ro.r(
-                        """
+                        r"""
                     library(mlr3mbo)
                     library(mlr3)
                     library(mlr3learners)
