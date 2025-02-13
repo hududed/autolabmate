@@ -63,30 +63,27 @@ def plot_output_with_confidence(
     df: pd.DataFrame, output_columns: list[str], metadata: Dict[str, Any]
 ) -> None:
     """
-    Plots raw output values as dots, mean values as crosses, and confidence intervals as filled areas
-    for each output column in a DataFrame. Adds hover functionality to reveal input metadata values.
+    Plots raw output values, mean predictions as crosses, and confidence intervals as filled areas.
+    Works for both single- and multi-objective cases.
 
     Parameters:
     - df: DataFrame containing the data.
-    - output_columns: List of output column names to plot.
-    - metadata: Dictionary containing metadata for hover information.
+    - output_columns: List of output column names.
+    - metadata: Dictionary containing metadata; must include 'X_columns' for hover info.
     """
-    X_columns = metadata[
-        "X_columns"
-    ]  # Assuming metadata contains a key 'X_columns' for hover data
+    X_columns = metadata["X_columns"]
 
-    for output in output_columns:
+    if len(output_columns) == 1:
+        # Single objective: plot one figure
+        output = output_columns[0]
         fig = go.Figure()
-
-        # Variables to ensure legend is only shown once for each type
         show_legend_for_raw = True
         show_legend_for_mean = True
         show_legend_for_confidence = True
-
-        # Define mean and standard error column names
         mean_col = f"{output}_mean"
         se_col = f"{output}_se"
 
+        # Plot raw output values
         for i, row in df.iterrows():
             hover_text = "<br>".join([f"{col}: {row[col]}" for col in X_columns])
             fig.add_trace(
@@ -101,14 +98,11 @@ def plot_output_with_confidence(
                     showlegend=show_legend_for_raw,
                 )
             )
-            show_legend_for_raw = (
-                False  # Only show legend for the first raw output trace
-            )
+            show_legend_for_raw = False
 
+        # Plot mean predictions and confidence intervals if available
         if mean_col in df.columns and se_col in df.columns:
             df_not_null = df.dropna(subset=[mean_col, se_col])
-
-            # Line plot for mean values as crosses
             fig.add_trace(
                 go.Scatter(
                     x=df_not_null.index,
@@ -121,9 +115,7 @@ def plot_output_with_confidence(
                     showlegend=show_legend_for_mean,
                 )
             )
-            show_legend_for_mean = False  # Only show legend for the first mean trace
-
-            # Fill between for confidence interval
+            show_legend_for_mean = False
             fig.add_trace(
                 go.Scatter(
                     x=df_not_null.index,
@@ -147,17 +139,86 @@ def plot_output_with_confidence(
                     showlegend=show_legend_for_confidence,
                 )
             )
-            show_legend_for_confidence = (
-                False  # Only show legend for the first confidence interval trace
-            )
+            show_legend_for_confidence = False
 
         fig.update_layout(
             title=f"{output} as a function of iteration",
             xaxis_title="Iteration",
             yaxis_title=output,
         )
-
         st.plotly_chart(fig)
+    else:
+        # Multi-objective: loop over each output column
+        for output in output_columns:
+            fig = go.Figure()
+            show_legend_for_raw = True
+            show_legend_for_mean = True
+            show_legend_for_confidence = True
+            mean_col = f"{output}_mean"
+            se_col = f"{output}_se"
+
+            for i, row in df.iterrows():
+                hover_text = "<br>".join([f"{col}: {row[col]}" for col in X_columns])
+                fig.add_trace(
+                    go.Scatter(
+                        x=[i],
+                        y=[row[output]],
+                        mode="markers+lines",
+                        marker=dict(size=10),
+                        text=hover_text,
+                        hoverinfo="text",
+                        name="Raw Output",
+                        showlegend=show_legend_for_raw,
+                    )
+                )
+                show_legend_for_raw = False
+
+            if mean_col in df.columns and se_col in df.columns:
+                df_not_null = df.dropna(subset=[mean_col, se_col])
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_not_null.index,
+                        y=df_not_null[mean_col],
+                        mode="markers",
+                        marker_symbol="x",
+                        marker_size=12,
+                        name="Mean Predicted Output",
+                        hoverinfo="skip",
+                        showlegend=show_legend_for_mean,
+                    )
+                )
+                show_legend_for_mean = False
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_not_null.index,
+                        y=df_not_null[mean_col] - df_not_null[se_col],
+                        mode="lines",
+                        line=dict(width=0),
+                        showlegend=False,
+                        hoverinfo="skip",
+                    )
+                )
+                fig.add_trace(
+                    go.Scatter(
+                        x=df_not_null.index,
+                        y=df_not_null[mean_col] + df_not_null[se_col],
+                        mode="lines",
+                        fill="tonexty",
+                        line=dict(width=0),
+                        fillcolor="rgba(128, 128, 128, 0.2)",
+                        name="Confidence Interval",
+                        hoverinfo="skip",
+                        showlegend=show_legend_for_confidence,
+                    )
+                )
+                show_legend_for_confidence = False
+
+            fig.update_layout(
+                title=f"{output} as a function of iteration",
+                xaxis_title="Iteration",
+                yaxis_title=output,
+            )
+            st.plotly_chart(fig)
 
 
 def plot_pairplot(df: pd.DataFrame) -> None:

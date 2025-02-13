@@ -1,36 +1,37 @@
-from typing import Any, Dict
-import streamlit as st
+# filepath: pages/dashboard.py
 from functools import partial
-from db.crud.table import get_table_names_by_user_id
+from typing import Any, Dict
+
+import streamlit as st
+
 from db.crud.data import (
     get_latest_data_metadata_by_user_id_table,
     get_latest_data_metadata_table_by_user_id,
 )
+from db.crud.table import get_table_names_by_user_id
+from dependencies.authentication import check_authentication, initialize_session_state
 from utils.dashboard import (
-    plot_output_with_confidence,
     plot_interaction_pdp,
-)
-from utils.ml import (
-    train_model,
-    train_model_multi,
-    feature_importance,
-    feature_importance_multi,
-)
-from utils.dashboard import (
+    plot_output_with_confidence,
     show_dashboard,
     show_dashboard_multi,
     show_interaction_pdp,
     show_interaction_pdp_multi,
 )
+from utils.dataframe import get_features
+from utils.ml import (
+    feature_importance,
+    feature_importance_multi,
+    train_model,
+    train_model_multi,
+)
 from utils.reports import (
     DashboardReportMulti,
     DashboardReportSingle,
-    report_pairplot,
     report_output_with_confidence,
+    report_pairplot,
     report_pdp,
 )
-from utils.dataframe import get_features
-from dependencies.authentication import initialize_session_state, check_authentication
 
 initialize_session_state()
 
@@ -128,6 +129,7 @@ def main():
                 show_dashboard(df, model, directions, output_columns)
                 feature_importance(df, model)
                 show_interaction_pdp(df, pair_param, model, overlay=True)
+                plot_output_with_confidence(df_with_preds, output_columns, metadata)
 
                 # Create the single-output report
                 report_generator = DashboardReportSingle(
