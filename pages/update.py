@@ -176,7 +176,7 @@ def main():
                         if (length(matched_files) == 0) {
                             stop(paste("No", pattern, "files found"))
                         }
-                        timestamps <- as.numeric(gsub(".*-(\\\\d+).*", "\\\\1", matched_files))
+                        timestamps <- as.numeric(gsub(".*-(\\d+).*", "\\1", matched_files))
                         latest_index <- which.max(timestamps)
                         return(matched_files[latest_index])
                     }
@@ -195,6 +195,9 @@ def main():
                     }
                     
                     load_files <- function(metadata, pattern, file_type) {
+                        if (!dir.exists(paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", metadata$batch_number))) {
+                            stop("Directory does not exist!")
+                        }
                         files = list.files(path = paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", metadata$batch_number), pattern = paste0("*.", file_type), full.names = TRUE)
                         latest_file = find_latest_file(files, pattern)
                         return(load_file(latest_file, file_type))
@@ -316,8 +319,6 @@ def main():
                         set.seed(metadata$seed)
                         result <- load_archive_data(metadata)
                         data_with_preds <- load_predicted_data(metadata)
-                        
-                        # Ensure data_with_preds is a data.table
                         data_with_preds <- as.data.table(data_with_preds)
 
                         print("Data with preds: ")
