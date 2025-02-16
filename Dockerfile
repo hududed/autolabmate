@@ -43,6 +43,7 @@ RUN apt-get update && apt-get install -y \
 
 # Set R_HOME environment variable
 ENV R_HOME=/usr/local/lib/R
+ENV RPY2_USE_CONTEXTVARS=1
 
 # Set the Streamlit port
 ENV PORT=8080

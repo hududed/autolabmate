@@ -111,13 +111,17 @@ def save_metadata(
         batch_number (int): The batch number. Defaults to 1.
         bucket_name (str): The name of the bucket. Defaults to 'test-bucket'.
     """
+    # Build the target directory path
+    target_dir = os.path.join(bucket_name, user_id, table_name, str(batch_number))
+    # Create the directory if it doesn't exist
+    os.makedirs(target_dir, exist_ok=True)
+
     # Convert the metadata dictionary to a JSON string
     json_metadata = json.dumps(metadata)
 
-    # Save the JSON string to an in-memory file
-    with open(
-        f"{bucket_name}/{user_id}/{table_name}/{batch_number}/metadata.json", "w"
-    ) as f:
+    # Save the JSON string to a file in the target directory
+    metadata_path = os.path.join(target_dir, "metadata.json")
+    with open(metadata_path, "w") as f:
         f.write(json_metadata)
 
 

@@ -208,18 +208,17 @@ pip-selfcheck.json
 *.DS_*
 
 # R code
-*.R
 !install_packages.R
 # standalone app
 *darwin*
-# TODO: separate large Rpy2 code
-r_scripts*
+mlr3*
 
 # old / tmp / archived / test / debug
 old*
 TMP*
 *test.py
 debug*
+test.R
 
 
 # End of https://www.toptal.com/developers/gitignore/api/python,venv,dotenv,data

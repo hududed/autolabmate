@@ -1,4 +1,6 @@
 # filepath: pages/update.py
+import os
+
 import pandas as pd
 import rpy2.robjects as ro
 import streamlit as st
@@ -51,6 +53,7 @@ if not st.session_state.update_page_loaded:
 
 
 def main():
+    pandas2ri.activate()
     check_authentication()
 
     # Reset st.session_state.button_start_ml to False when the page is loaded
@@ -121,292 +124,6 @@ def main():
 
                     # TODO: data is then saved save_to_local with user input batch_number. path should be e.g. test-bucket/{table_name}/{batch_number}/*.csv
 
-                    ro.r(
-                        r"""
-                    library(mlr3mbo)
-                    library(mlr3)
-                    library(mlr3learners)
-                    library(bbotk)
-                    library(data.table)
-                    library(tibble)
-                    library(R.utils)
-                    
-                    round_to_nearest <- function(x, metadata) {
-                        to_nearest = metadata$to_nearest
-                        x_columns = metadata$X_columns
-                        print("Metadata$to_nearest:")
-                        print(to_nearest)
-                        print("Metadata$X_columns:")
-                        print(x_columns)
-                        if (is.data.table(x) || is.data.frame(x)) {
-                            for (col_name in names(x)) {
-                                if (col_name %in% x_columns) {
-                                    col = x[[col_name]]
-                                    if (is.numeric(col)) {
-                                        nearest = as.numeric(to_nearest[[col_name]])
-                                        print(paste("Column:", col_name))
-                                        print(paste("Nearest value:", nearest))
-                                        print("Values before rounding:")
-                                        print(col)
-                                        x[[col_name]] = round(col / nearest) * nearest
-                                        print("Values after rounding:")
-                                        print(x[[col_name]])
-                                    }
-                                } else {
-                                    print(paste("Skipping column:", col_name))
-                                }
-                            }
-                        } else if (is.numeric(x)) {
-                            nearest = as.numeric(to_nearest)
-                            print("Nearest value:")
-                            print(nearest)
-                            print("Values before rounding:")
-                            print(x)
-                            x <- round(x / nearest) * nearest
-                            print("Values after rounding:")
-                            print(x)
-                        } else {
-                            stop("x must be a data.table, data.frame, or numeric vector")
-                        }
-                        return(x)
-                    }
-                    
-                    find_latest_file <- function(files, pattern) {
-                        matched_files <- grep(pattern, files, value = TRUE)
-                        if (length(matched_files) == 0) {
-                            stop(paste("No", pattern, "files found"))
-                        }
-                        timestamps <- as.numeric(gsub(".*-(\\d+).*", "\\1", matched_files))
-                        latest_index <- which.max(timestamps)
-                        return(matched_files[latest_index])
-                    }
-                    
-                    load_file <- function(file_path, file_type) {
-                        if (!file.exists(file_path)) {
-                            stop(paste("File does not exist:", file_path))
-                        }
-                        if (file_type == "csv") {
-                            return(read.csv(file_path))
-                        } else if (file_type == "rds") {
-                            return(readRDS(file_path))
-                        } else {
-                            stop(paste("Unsupported file type:", file_type))
-                        }
-                    }
-                    
-                    load_files <- function(metadata, pattern, file_type) {
-                        if (!dir.exists(paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", metadata$batch_number))) {
-                            stop("Directory does not exist!")
-                        }
-                        files = list.files(path = paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", metadata$batch_number), pattern = paste0("*.", file_type), full.names = TRUE)
-                        latest_file = find_latest_file(files, pattern)
-                        return(load_file(latest_file, file_type))
-                    }
-                    
-                    load_predicted_data <- function(metadata) {
-                        metadata$batch_number <- as.integer(metadata$batch_number)
-                        return(load_files(metadata, "with-preds", "csv"))
-                    }
-                    
-                    load_archive_data <- function(metadata) {
-                        acqf = load_files(metadata, "acqf-", "rds")
-                        acqopt = load_files(metadata, "acqopt-", "rds")
-                        archive = load_files(metadata, "archive-", "rds")
-                        acqf$surrogate$archive = archive
-                        return(list(archive, acqf, acqopt))
-                    }
-                    
-                    save_archive <- function(archive, acq_function, acq_optimizer, metadata) {
-                        timestamp <- format(Sys.time(), "%Y%m%d-%H%M")
-                        new_batch_number = as.integer(metadata$batch_number) + 1
-                        dir_path = paste0(metadata$bucket_name, "/", metadata$user_id, "/", metadata$table_name, "/", new_batch_number)
-                        if (!dir.exists(dir_path)) {
-                            dir.create(dir_path, recursive = TRUE)
-                        }
-                        saveRDS(archive, paste0(dir_path, "/archive-", timestamp, ".rds"))
-                        saveRDS(acq_function, paste0(dir_path, "/acqf-", timestamp, ".rds"))
-                        saveRDS(acq_optimizer, paste0(dir_path, "/acqopt-", timestamp, ".rds"))
-                    }
-                    
-                    update_and_optimize <- function(acq_function, acq_optimizer, tmp_archive, candidate_new, lie, metadata) {
-                        acq_function$surrogate$update()
-                        acq_function$update()
-                        tmp_archive$add_evals(xdt = candidate_new,
-                                              xss_trafoed = transform_xdt_to_xss(candidate_new, tmp_archive$search_space),
-                                              ydt = lie)
-                        candidate_new = acq_optimizer$optimize()
-                        candidate_new = round_to_nearest(candidate_new, metadata)
-                        return(candidate_new)
-                    }
-                    
-                    add_evals_to_archive <- function(archive, acq_function, acq_optimizer, data, q, metadata) {
-                        if (!is.data.table(archive$data)) {
-                            stop("archive$data must be a data.table")
-                        }
-                        acq_function$surrogate$update()
-                        acq_function$update()
-                        candidate <- acq_optimizer$optimize()
-                        candidate <- round_to_nearest(candidate, metadata)
-                        tmp_archive = archive$clone(deep = TRUE)
-                        acq_function$surrogate$archive = tmp_archive
-                        min_value <- min
-                        acq_function$surrogate$update()
-                        acq_function$update()
-                        candidate <- acq_optimizer$optimize()
-
-                        print("Candidate after optimize before rounding:")
-                        print(candidate)
-
-                        candidate <- round_to_nearest(candidate, metadata)
-                        print("Candidate after rounding:")
-                        print(candidate)
-
-                        tmp_archive = archive$clone(deep = TRUE)
-                        acq_function$surrogate$archive = tmp_archive
-                        min_values <- data.table()
-                        for (col_name in archive$cols_y) {
-                            min_values[, (col_name) := min_value(archive$data[[col_name]])]
-                        }
-                        candidate_new = candidate
-
-                        print("Candidate_new before update loop:")
-                        print(candidate_new)
-
-                        for (i in seq_len(q)) {
-                            prediction <- acq_function$surrogate$predict(candidate_new)
-                            col_names <- c(paste0(archive$cols_y[1], "_mean"), paste0(archive$cols_y[1], "_se"))
-                            if (length(archive$cols_y) > 1) {
-                                col_names <- c(col_names, paste0(archive$cols_y[2], "_mean"), paste0(archive$cols_y[2], "_se"))
-                            }
-                            for (col_name in col_names) {
-                                if (!col_name %in% names(candidate_new)) {
-                                    candidate_new[, (col_name) := NA]
-                                }
-                            }
-                            if (length(archive$cols_y) > 1) {
-                                candidate_new[, (col_names) := .(prediction[[1]]$mean[1], prediction[[1]]$se[1],
-                                                                prediction[[2]]$mean[1], prediction[[2]]$se[1])]
-                            } else {
-                                candidate_new[, (col_names) := .(prediction$mean[1], prediction$se[1])]
-                            }
-
-                            print(paste("Iteration", i, "candidate_new before update_optimize:"))
-                            print(candidate_new)
-
-                            if (i > 1) {
-                                candidate <- rbind(candidate, candidate_new, fill = TRUE)
-                            } else {
-                                candidate <- candidate_new
-                            }
-                            if (i < q) {
-                                candidate_new <- update_and_optimize(acq_function, acq_optimizer,
-                                                                    tmp_archive, candidate_new,
-                                                                    min_values, metadata)
-                            }
-                            print("Candidate_new after update_and_optimize:")
-                            print(candidate_new)
-                        }
-                        for (col in names(candidate_new)) {
-                            if (is.double(candidate_new[[col]])) {
-                                candidate_new[[col]] <- format(round(candidate_new[[col]], 2), nsmall = 2)
-                            }
-                        }
-                        save_archive(archive, acq_function, acq_optimizer, metadata)
-                        return(list(candidate, archive, acq_function))
-                    }
-                    
-                    experiment <- function(data, metadata) {
-                        set.seed(metadata$seed)
-                        result <- load_archive_data(metadata)
-                        data_with_preds <- load_predicted_data(metadata)
-                        data_with_preds <- as.data.table(data_with_preds)
-
-                        print("Data with preds: ")
-                        print(data_with_preds)
-
-                        print("NUM RANDOM LINES: ")
-                        print(metadata$num_random_lines)
-
-                        full_data <- as.data.table(data)
-                        data <- tail(full_data, n=as.integer(metadata$num_random_lines))
-                        print("Full data: ")
-                        print(full_data)
-                        print("Tail Data: ")
-                        print(data)
-                        
-                        for (output_column_name in metadata$output_column_names) {
-                            if (output_column_name %in% names(data_with_preds)) {
-                                start_row <- max(1, nrow(data_with_preds) - as.integer(metadata$num_random_lines) + 1)
-                                data_with_preds[(start_row:nrow(data_with_preds)), (output_column_name) := full_data[(start_row:nrow(data_with_preds)), ..output_column_name]]
-                            }
-                        }
-                        
-                        print("Updated data_with_preds: ")
-                        print(data_with_preds)
-                        
-                        archive <- result[[1]]
-                        
-                        # Reinitialize surrogate and acquisition function based on learner_choice
-                        num_objectives <- length(metadata$output_column_names)
-                        if (num_objectives == 1) {
-                            if (metadata$learner_choice == "Gaussian Process") {
-                                surrogate <- srlrn(default_gp(), archive = archive)
-                            } else {
-                                surrogate <- srlrn(default_rf(), archive = archive)
-                            }
-                            acq_function <- acqf("ei", surrogate = surrogate)
-                        } else {
-                            if (metadata$learner_choice == "Gaussian Process") {
-                                surrogate <- srlrn(list(default_gp(), default_gp()), archive = archive)
-                            } else {
-                                surrogate <- srlrn(list(default_rf(), default_rf()), archive = archive)
-                            }
-                            acq_function <- acqf("ehvi", surrogate = surrogate)
-                        }
-                        acq_optimizer <- acqo(opt("random_search", batch_size = 1000),
-                                              terminator = trm("evals", n_evals = 1000),
-                                              acq_function = acq_function)
-                        
-                        q = metadata$num_random_lines
-                        result = add_evals_to_archive(archive, acq_function, acq_optimizer,
-                                                      data, q, metadata)
-                        
-                        candidate <- result[[1]]
-                        archive <- result[[2]]
-                        acq_function <- result[[3]]
-
-                        print(result)
-
-                        if (all(names(metadata$parameter_info) %in% names(candidate))) {
-                            x2 <- candidate[, names(metadata$parameter_info), with=FALSE]
-                        } else {
-                            print("Error: One or more required columns do not exist in candidate.")
-                            return()
-                        }
-                        
-                        print("New candidates: ")
-                        print(x2)
-                        print("New archive: ")
-                        print(archive)
-                        
-                        x2_dt <- as.data.table(x2)
-                        full_data <- rbindlist(list(full_data, x2_dt), fill = TRUE)
-                        
-                        print("Full data after adding new candidates: ")
-                        print(full_data)
-                        
-                        candidate_with_preds <- candidate[, -c(".already_evaluated","x_domain"), with = FALSE]
-                        
-                        data_with_preds <- rbindlist(list(data_with_preds, candidate_with_preds), fill = TRUE)
-                        print("Data with preds, new candidate: ")
-                        print(data_with_preds)
-                        
-                        result <- list(data_no_preds = full_data, data_with_preds = data_with_preds)
-                        print("Returning data to streamlit")
-                        return(result)
-                    }
-                    """
-                    )
         if "button_start_ml" not in st.session_state:
             st.session_state.button_start_ml = False
 
@@ -414,18 +131,30 @@ def main():
             st.session_state.button_start_ml = not st.session_state.button_start_ml
 
         if st.session_state.button_start_ml:
-            pandas2ri.activate()
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            print("base_dir:", base_dir)
+            metadata["base_dir"] = base_dir
+            metadata["batch_number"] = batch_number
+
+            r_dir = os.path.join(base_dir, "R")
+            with ro.conversion.localconverter(
+                ro.default_converter + pandas2ri.converter
+            ):
+                ro.r.source(os.path.join(r_dir, "update.R"))
+
             converter = ro.default_converter + pandas2ri.converter
             with converter.context():
                 r_data = ro.conversion.get_conversion().py2rpy(
                     st.session_state.new_data
                 )
+                print("Metadata being passed to R:", metadata)
                 r_metadata = py_dict_to_r_list(metadata)
                 rsum = ro.r["experiment"]
                 result = rsum(r_data, r_metadata)
                 data_no_preds = result["data_no_preds"]
                 data_with_preds = result["data_with_preds"]
-                metadata["batch_number"] = batch_number
+
+                # metadata["batch_number"] = batch_number
                 upload_metadata_to_bucket(metadata, batch_number)
                 df_no_preds = ro.conversion.get_conversion().rpy2py(data_no_preds)
                 df_with_preds = ro.conversion.get_conversion().rpy2py(data_with_preds)
