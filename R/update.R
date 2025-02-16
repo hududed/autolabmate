@@ -7,23 +7,14 @@ library(data.table)
 library(tibble)
 library(R.utils)
 
-helper_path <- file.path(getwd(), "R", "experiment_helpers.R")
-helper_path <- file.path(getwd(), "R", "file_ops.R")
-source(helper_path)
+source(file.path(getwd(), "R", "experiment_helpers.R"))
+source(file.path(getwd(), "R", "file_ops.R"))
 
 experiment <- function(data, metadata) {
-  print("R: Metadata batch number:")
-  print(metadata$batch_number)
   # The user passes in the new batch number (e.g., 2) via metadata.
   new_batch <- as.integer(metadata$batch_number)
   # Compute the previous batch number for loading archive files.
   old_batch <- as.character(new_batch - 1)
-
-  print("R: New batch number:")
-  print(new_batch)
-  print("R: Old batch number:")
-  print(old_batch)
-
 
   # Create a copy of metadata for loading:
   metadata_load <- metadata
@@ -35,18 +26,17 @@ experiment <- function(data, metadata) {
   data_with_preds <- load_predicted_data(metadata_load) # nolint
   data_with_preds <- as.data.table(data_with_preds)
 
-  print("Data with preds: ")
+  print(" >>>> Data with preds: ")
   print(data_with_preds)
 
-  print("NUM RANDOM LINES: ")
+  print(" >>>> NUM RANDOM LINES: ")
   print(metadata$num_random_lines)
 
   full_data <- as.data.table(data)
-  data <- tail(full_data, n = as.integer(metadata$num_random_lines))
-  print("Full data: ")
+  data <- full_data
+  print(" >>>> Full data (all datapoints): ")
   print(full_data)
-  print("Tail Data: ")
-  print(data)
+
   for (output_column_name in metadata$output_column_names) {
     if (output_column_name %in% names(data_with_preds)) {
         start_row <- max(1, nrow(data_with_preds) - as.integer(metadata$num_random_lines) + 1) # nolint: line_length_linter
@@ -54,9 +44,22 @@ experiment <- function(data, metadata) {
                         (output_column_name) := full_data[(start_row:nrow(data_with_preds)), ..output_column_name]] # nolint: line_length_linter
     }
   }
-  print("Updated data_with_preds: ")
+  print(" >>>> Updated data_with_preds: ")
   print(data_with_preds)
+
   archive <- result[[1]]
+  # In update.R: Append the new raw data rows to the loaded archive
+  if (new_batch > 1) {
+    # Assume the new raw data are the last metadata$num_random_lines rows
+    new_raw <- tail(full_data, n = as.integer(metadata$num_random_lines))
+    archive$add_evals(
+      xdt = new_raw[, names(metadata$parameter_info), with = FALSE],
+      ydt = new_raw[, metadata$output_column_names, with = FALSE]
+    )
+    print(" >>>> Archive after appending new raw data:")
+    print(archive)
+  }
+
   # Reinitialize surrogate and acquisition function based on learner_choice
   num_objectives <- length(metadata$output_column_names)
   if (num_objectives == 1) {
@@ -92,23 +95,23 @@ experiment <- function(data, metadata) {
     print("Error: One or more required columns do not exist in candidate.")
     return()
   }
-  print("New candidates: ")
+  print(" >>>> New candidates: ")
   print(x2)
-  print("New archive: ")
+  print(" >>>> New archive: ")
   print(archive)
   x2_dt <- as.data.table(x2)
   full_data <- rbindlist(list(full_data, x2_dt), fill = TRUE)
-  print("Full data after adding new candidates: ")
+  print(" >>>> Full data after adding new candidates: ")
   print(full_data)
   candidate_with_preds <- candidate[, -c(".already_evaluated","x_domain"), with = FALSE] # nolint: line_length_linter
   data_with_preds <- rbindlist(list(data_with_preds, candidate_with_preds), fill = TRUE) # nolint: line_length_linter
-  print("Data with preds, new candidate: ")
+  print(" >>>> Data with preds, new candidate: ")
   print(data_with_preds)
 
   # Now update metadata so that saving uses the new batch number.
   metadata$batch_number <- as.character(new_batch)
 
   result <- list(data_no_preds = full_data, data_with_preds = data_with_preds)
-  print("Returning data to streamlit")
+  print(" >>>> Returning data to streamlit")
   return(result)
 }

@@ -14,7 +14,7 @@ auth-gcloud:
 	gcloud config set project $(PROJECT_ID)
 
 build-docker-containers-local:
-	docker build --platform $(LOCAL_PLATFORM) -t $(IMAGE_NAME) .
+	docker build --no-cache --platform $(LOCAL_PLATFORM) -t $(IMAGE_NAME) .
 
 run-docker-containers-local:
 	docker run --platform $(LOCAL_PLATFORM) -p 8080:8080 $(IMAGE_NAME)
@@ -23,7 +23,7 @@ prune-docker-containers:
 	docker system prune -a
 
 build-and-push:
-	docker build --platform $(CLOUD_PLATFORM) -t $(IMAGE_NAME) .
+	docker build --no-cache --platform $(CLOUD_PLATFORM) -t $(IMAGE_NAME) .
 	docker push $(IMAGE_NAME)
 
 allow-unauthenticated:

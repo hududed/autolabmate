@@ -7,12 +7,9 @@ library(data.table)
 
 
 round_to_nearest <- function(x, metadata) {
+  print("######### ROUNDING TO NEAREST #########")
   to_nearest <- metadata$to_nearest
   x_columns <- metadata$X_columns
-  print("Metadata$to_nearest:")
-  print(to_nearest)
-  print("Metadata$X_columns:")
-  print(x_columns)
 
   if (is.data.table(x) || is.data.frame(x)) {
     for (col_name in names(x)) {
@@ -53,6 +50,7 @@ round_to_nearest <- function(x, metadata) {
 }
 
 save_archive <- function(archive, acq_function, acq_optimizer, metadata) {
+  print(" ######## SAVING ARCHIVE, ACQ_FUNCTION, AND ACQ_OPTIMIZER ########")
   timestamp <- format(Sys.time(), "%Y%m%d-%H%M")
   dir_path <- file.path(metadata$base_dir,
                         metadata$bucket_name,
@@ -65,11 +63,11 @@ save_archive <- function(archive, acq_function, acq_optimizer, metadata) {
   saveRDS(archive, paste0(dir_path,  "/archive-", timestamp, ".rds"))
   saveRDS(acq_function, paste0(dir_path, "/acqf-", timestamp, ".rds"))
   saveRDS(acq_optimizer, paste0(dir_path, "/acqopt-", timestamp, ".rds"))
-  print(" ###########################################################")
   print(paste0("Archive, acq_function, and acq_optimizer saved to", dir_path))
 }
 
 update_and_optimize <- function(acq_function, acq_optimizer, tmp_archive, candidate_new, lie, metadata) { # nolint: line_length_linter.
+  print("######### UPDATING AND OPTIMIZING #########")
   acq_function$surrogate$update()
   acq_function$update()
   tmp_archive$add_evals(xdt = candidate_new,
@@ -81,12 +79,10 @@ update_and_optimize <- function(acq_function, acq_optimizer, tmp_archive, candid
 }
 
 add_evals_to_archive <- function(archive, acq_function, acq_optimizer, data, q, metadata) { # nolint
+  print("######### ADDING EVALS TO ARCHIVE #########")
   if (!is.data.table(archive$data)) {
     stop("archive$data must be a data.table")
   }
-
-  print("Metadata$to_nearest:")
-  print(metadata$to_nearest)
 
   acq_function$surrogate$update()
   acq_function$update()

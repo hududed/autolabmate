@@ -1,11 +1,11 @@
+# filepath: R/propose.R
 library(mlr3mbo)
 library(mlr3)
 library(mlr3learners)
 library(bbotk)
 library(data.table)
 
-helper_path <- file.path(getwd(), "R", "experiment_helpers.R")
-source(helper_path)
+source(file.path(getwd(), "R", "experiment_helpers.R"))
 
 experiment <- function(data, metadata) { # nolint: cyclocomp_linter.
   set.seed(metadata$seed)
@@ -17,7 +17,7 @@ experiment <- function(data, metadata) { # nolint: cyclocomp_linter.
     param_range <- metadata$parameter_ranges[[param_name]]
 
     # Check if param_info is 'object', if so, no need to convert to numeric
-    print(paste("Adding parameter to search_space with id: ", param_name))
+    print(paste(" >>> Adding parameter to search_space with id: ", param_name))
     if (param_info == "object") {
       search_space_list[[param_name]] <- p_fct(levels = param_range) # nolint
       next
@@ -43,7 +43,7 @@ experiment <- function(data, metadata) { # nolint: cyclocomp_linter.
   search_space <- do.call(ps, search_space_list) # nolint
   codomain_list <- list()
   for (output_name in names(metadata$directions)) {
-    print(paste("Adding output to codomain with id: ", output_name))
+    print(paste(" >>> Adding output to codomain with id: ", output_name))
     direction <- toString(metadata$directions[[output_name]])
 
     # Add the output to the codomain
@@ -61,7 +61,7 @@ experiment <- function(data, metadata) { # nolint: cyclocomp_linter.
   archive$add_evals(xdt = data[, names(metadata$parameter_info), with = FALSE],
                     ydt = data[, metadata$output_column_names, with = FALSE])
 
-  print("Model archive so far: ")
+  print(" >>> Model archive so far: ")
   print(archive)
   # Determine the number of objectives
   num_objectives <- length(metadata$output_column_names)
@@ -93,9 +93,9 @@ experiment <- function(data, metadata) { # nolint: cyclocomp_linter.
   print(result)
 
   x2 <- candidate[, names(metadata$parameter_info), with = FALSE]
-  print("New candidates: ")
+  print(" >>> New candidates: ")
   print(x2)
-  print("New archive: ")
+  print(" >>> New archive: ")
   print(archive)
 
   x2_dt <- as.data.table(x2)
@@ -103,9 +103,9 @@ experiment <- function(data, metadata) { # nolint: cyclocomp_linter.
   candidate_with_preds <- candidate[, -c(".already_evaluated", "x_domain"), with = FALSE] # nolint: line_length_linter.
   data_with_preds <- rbindlist(list(data, candidate_with_preds), fill = TRUE)
 
-  print("Data no preds: ")
+  print(" >>> Data no preds: ")
   print(data_no_preds)
-  print("Data with preds: ")
+  print(" >>> Data with preds: ")
   print(data_with_preds)
 
   # Combine the results into a list
