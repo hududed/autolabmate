@@ -44,11 +44,15 @@ allow-unauthenticated-staging:
 deploy-staging:
 	gcloud run services replace cloudrun-staging.yaml --region $(REGION)
 
-
 delete-staging:
 	gcloud run services delete $(STAGING_SERVICE_NAME) --region $(REGION) --quiet
 
-all: build-and-push deploy allow-unauthenticated
+merge-dev-to-main:
+	git checkout main
+	git merge dev
+	git push origin main
+
+production: build-and-push deploy allow-unauthenticated
 
 local: build-docker-containers-local run-docker-containers-local
 
