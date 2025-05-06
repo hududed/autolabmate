@@ -9,7 +9,11 @@ from db.crud.data import (
     get_latest_data_metadata_table_by_user_id,
 )
 from db.crud.table import get_table_names_by_user_id
-from dependencies.authentication import check_authentication, initialize_session_state
+from dependencies.authentication import (
+    check_authentication,
+    initialize_session_state_basic,
+)
+from dependencies.navigation import authenticate_and_show_nav
 from utils.dashboard import (
     plot_interaction_pdp,
     plot_output_with_confidence,
@@ -33,7 +37,10 @@ from utils.reports import (
     report_pdp,
 )
 
-initialize_session_state()
+# Set page config first
+st.set_page_config(page_title="Upload | Autolabmate", page_icon="⬆️")
+authenticate_and_show_nav()
+initialize_session_state_basic()
 
 st.title("Dashboard")
 

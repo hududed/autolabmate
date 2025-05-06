@@ -1,21 +1,33 @@
+import time
+
 import streamlit as st
-from db.database import supabase_client
-from dependencies.authentication import initialize_session_state
-from st_pages import show_pages, Page
-from streamlit_extras.switch_page_button import switch_page
-from time import sleep
+
 from db.crud.table import (
     create_experiments_table,
-    enable_rls_for_table,
     create_policy_for_table,
+    enable_rls_for_table,
 )
+from db.database import supabase_client
+from dependencies.authentication import (
+    check_cookie_auth,
+    initialize_session_state_basic,
+    save_auth_cookies,
+)
+from dependencies.navigation import show_navigation_menu
 
-initialize_session_state()
+st.set_page_config(page_title="Autolabmate", page_icon="👨‍🔬")
+# Initialize session state and check cookies
+initialize_session_state_basic()
+check_cookie_auth()
 
+# Configure page with title and icon
 st.title("Welcome to Autolabmate!!")
 
+# Show navigation if authenticated
+if st.session_state.get("authentication_status", False):
+    show_navigation_menu()
 
-# Login form
+
 def login():
     st.header("Login")
     email = st.text_input("Email")
@@ -27,25 +39,22 @@ def login():
             credentials={"email": email, "password": password}
         )
 
-        if response:
-            st.success("Logged In Successfully {}".format(email))
+        if response and hasattr(response, "user") and response.user:
+            # Extract session and user data
+            session = response.session
+            user = response.user
+
+            # Update session state
             st.session_state.authentication_status = True
-            st.session_state.user_id = response.user.id
+            st.session_state.user_id = user.id
 
-            show_pages(
-                [
-                    Page("pages/generate.py", "generate", icon="📝"),
-                    Page("pages/upload.py", "upload", icon="⬆️"),
-                    Page("pages/dashboard.py", "dashboard", icon="📈"),
-                    Page("pages/propose.py", "propose", icon="🤖"),
-                    Page("pages/update.py", "update", icon="🔄"),
-                    Page("pages/logout.py", "logout", icon="🚪"),
-                    Page("app.py", ""),
-                ]
-            )
+            # Save token for persistent session
+            save_auth_cookies(session.access_token, user.id)
 
-            switch_page("Upload")  # switch to second page
+            st.success(f"Logged In Successfully {email}")
 
+            # Direct navigation - no rerun, no flags
+            st.switch_page("pages/upload_2.py")
         else:
             st.error("Invalid email or password")
             st.session_state.authentication_status = False
@@ -82,35 +91,30 @@ def signup():
                 st.error(f"An error occurred: {e}")
 
 
-# Logout page
-def logout():
-    st.session_state.authentication_status = False  # set the logged_in state to False
-    res = supabase_client.auth.sign_out()
-    if res:
-        st.error(f"Error logging out: {res}")
-    else:
-        st.success("Logged out successfully")
-        sleep(5)
-        switch_page("")  # switch back to the login page
-
-
 # Run the Streamlit app
 def main():
-    initialize_session_state()
-
-    show_pages([Page("app.py", "home")])
-
     create_experiments_table()
     enable_rls_for_table("experiments")
     create_policy_for_table("experiments")
 
-    # Display the login or sign-up form based on user selection
-    form_choice = st.selectbox("Select an option:", ("Login", "Sign Up"))
+    # First, always check for "do_redirect" flag
+    if st.session_state.get("do_redirect", False):
+        st.session_state.pop("do_redirect", None)
+        time.sleep(0.1)  # Small delay
+        st.switch_page("pages/upload_2.py")
+        return  # Exit early
 
-    if form_choice == "Login":
-        login()
-    elif form_choice == "Sign Up":
-        signup()
+    # Handle navigation after login
+    if st.session_state.get("authentication_status", False):
+        st.switch_page("pages/upload_2.py")
+    else:
+        # Display the login or sign-up form based on user selection
+        form_choice = st.selectbox("Select an option:", ("Login", "Sign Up"))
+
+        if form_choice == "Login":
+            login()
+        elif form_choice == "Sign Up":
+            signup()
 
 
 if __name__ == "__main__":

@@ -15,8 +15,9 @@ from db.crud.table import get_table_names_by_user_id
 from dependencies.authentication import (
     check_authentication,
     clear_session_state,
-    initialize_session_state,
+    initialize_session_state_basic,
 )
+from dependencies.navigation import authenticate_and_show_nav
 from utils.dataframe import replace_value_with_nan
 from utils.file import (
     compress_files,
@@ -34,7 +35,11 @@ from utils.io import (
 )
 from utils.rpy2_utils import py_dict_to_r_list
 
-initialize_session_state()
+# Set page config first
+st.set_page_config(page_title="Upload | Autolabmate", page_icon="⬆️")
+
+authenticate_and_show_nav()
+initialize_session_state_basic()
 
 if "update_page_loaded" in st.session_state:
     del st.session_state.update_page_loaded

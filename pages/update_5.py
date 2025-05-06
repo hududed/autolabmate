@@ -17,6 +17,7 @@ from dependencies.authentication import (
     clear_session_state,
     initialize_session_state,
 )
+from dependencies.navigation import authenticate_and_show_nav
 from utils.dataframe import replace_value_with_nan
 from utils.file import (
     compress_files,
@@ -29,6 +30,9 @@ from utils.file import (
 from utils.io import generate_timestamps, validate_inputs
 from utils.rpy2_utils import py_dict_to_r_list
 
+st.set_page_config(page_title="Upload | Autolabmate", page_icon="⬆️")
+
+authenticate_and_show_nav()
 initialize_session_state()
 
 # Clear propose_page_loaded flag when loading the update page

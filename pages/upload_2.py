@@ -4,9 +4,16 @@ import streamlit as st
 
 from db.crud.data import insert_data
 from dependencies.authentication import check_authentication, initialize_session_state
+from dependencies.navigation import authenticate_and_show_nav
 from utils.dataframe import sanitize_column_names_for_table
 from utils.file import save_to_local, upload_local_to_bucket
 from utils.io import sanitize_table_name
+
+# Set page config first
+st.set_page_config(page_title="Upload | Autolabmate", page_icon="⬆️")
+
+# Check authentication and show navigation
+authenticate_and_show_nav()
 
 st.title("Upload first batch CSV")
 
